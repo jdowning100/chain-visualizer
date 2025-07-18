@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quai-viz-service
+  namespace: quai-sandbox
+spec:
+  selector:
+    app: quai-viz
+  ports:
+  - port: 80
+    targetPort: 80
+  type: NodePort
+

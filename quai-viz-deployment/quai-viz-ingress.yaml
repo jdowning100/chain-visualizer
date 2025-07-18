@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: quai-viz-ingress
+  namespace: quai-sandbox
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: quai-viz-ip
+    networking.gke.io/managed-certificates: quai-viz-cert
+spec:
+  rules:
+  - host: live.qu.ai
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: quai-viz-service   
+            port:
+              number: 80
+

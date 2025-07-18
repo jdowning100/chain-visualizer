@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quai-viz-deployment
+  namespace: quai-sandbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quai-viz
+  template:
+    metadata:
+      labels:
+        app: quai-viz
+    spec:
+      containers:
+      - name: quai-viz
+        image: quainetwork/quai-visualizer:v0.0.1
+        ports:
+        - containerPort: 80
