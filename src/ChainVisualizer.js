@@ -29,6 +29,7 @@ const ChainVisualizer = () => {
       uncle: '#FF9800',      // Orange for uncles  
       workshare: '#2196F3',  // Blue for workshares
       arrow: '#888',         // Gray for arrows
+      coincident: '#666',    // Gray for coincident lines
       text: '#fff'           // White for text
     },
     sizes: {
@@ -39,53 +40,99 @@ const ChainVisualizer = () => {
   };
 
   // Add new item (block, uncle, or workshare)
-  const addItem = useCallback((type, hash, parentHash, number = null, order = null) => {
+  const addItem = useCallback((type, hash, parentHash, number = null, order = null, headerParentHashes = null, includingHash = null) => {
     const shortHash = hash.slice(0, 8);
     
     setItems(prevItems => {
-      const existingItem = prevItems.find(item => item.fullHash === hash);
-      if (existingItem) {
-        console.log(`Duplicate ${type} detected, skipping: ${shortHash}`);
-        return prevItems;
-      }
-      
-      let decimalNumber = null;
-      if (number) {
-        decimalNumber = parseInt(number, 16);
-      }
-      
-      // Determine block type based on order
-      let blockType = type;
-      if (type === 'block' && order !== null) {
-        const orderNum = typeof order === 'string' ? parseInt(order, 16) : order;
-        if (orderNum === 0) {
-          blockType = 'primeBlock';
-        } else if (orderNum === 1) {
-          blockType = 'regionBlock'; 
-        } else {
-          blockType = 'block';
+      if (type !== 'block') {
+        let decimalNumber = null;
+        if (number) {
+          decimalNumber = parseInt(number, 16);
         }
-      }
-      
-      const newItem = {
-        id: `${blockType}-${shortHash}-${Date.now()}`,
-        type: blockType,
-        hash: shortHash,
-        fullHash: hash,
-        parentHash: parentHash ? parentHash.slice(0, 8) : null,
-        fullParentHash: parentHash,
-        number: decimalNumber,
-        order: order,
-        timestamp: Date.now()
-      };
+        
+        const existingIndex = prevItems.findIndex(item => item.fullHash === hash && item.type === type);
+        if (existingIndex !== -1) {
+          if (includingHash) {
+            // Update existing with includedIn
+            const updatedItem = { ...prevItems[existingIndex], includedIn: includingHash };
+            const newItems = [...prevItems];
+            newItems[existingIndex] = updatedItem;
+            console.log(`Updated ${type}: ${shortHash} with includedIn ${includingHash}`);
+            return newItems;
+          } else {
+            console.log(`Duplicate ${type} detected, skipping: ${shortHash}`);
+            return prevItems;
+          }
+        }
+        
+        const newItem = {
+          id: `${type}-${shortHash}-${Date.now()}`,
+          type: type,
+          hash: shortHash,
+          fullHash: hash,
+          parentHash: parentHash ? parentHash.slice(0, 8) : null,
+          fullParentHash: parentHash,
+          number: decimalNumber,
+          order: order,
+          timestamp: Date.now(),
+          includedIn: includingHash || null
+        };
 
-      console.log(`Added ${blockType}: ${shortHash} -> ${newItem.fullParentHash} (${decimalNumber})`);
-      
-      if (decimalNumber !== null && decimalNumber > maxHeightRef.current) {
-        maxHeightRef.current = decimalNumber;
+        console.log(`Added ${type}: ${shortHash} -> ${newItem.fullParentHash} (${decimalNumber}) includedIn: ${newItem.includedIn}`);
+        
+        if (decimalNumber !== null && decimalNumber > maxHeightRef.current) {
+          maxHeightRef.current = decimalNumber;
+        }
+        
+        return [...prevItems, newItem].sort((a, b) => (a.number || 0) - (b.number || 0));
+      } else {
+        // For 'block' type, create multiple representations based on order
+        let decimalNumber = parseInt(number, 16);
+        const orderNum = parseInt(order, 16);
+        const newItems = [];
+
+        const addRepresentation = (blockType, parent) => {
+          const existing = prevItems.find(item => item.fullHash === hash && item.type === blockType);
+          if (existing) return;
+
+          const item = {
+            id: `${blockType}-${shortHash}-${Date.now()}`,
+            type: blockType,
+            hash: shortHash,
+            fullHash: hash,
+            parentHash: parent ? parent.slice(0, 8) : null,
+            fullParentHash: parent,
+            number: decimalNumber,
+            order: order,
+            timestamp: Date.now()
+          };
+
+          console.log(`Added ${blockType}: ${shortHash} -> ${item.fullParentHash} (${decimalNumber})`);
+          newItems.push(item);
+        };
+
+        if (orderNum === 0) {
+          // Prime: add prime, region, zone
+          addRepresentation('primeBlock', headerParentHashes[0]);
+          addRepresentation('regionBlock', headerParentHashes[1]);
+          addRepresentation('block', parentHash);
+        } else if (orderNum === 1) {
+          // Region: add region, zone
+          addRepresentation('regionBlock', headerParentHashes[1] || headerParentHashes[0]);
+          addRepresentation('block', parentHash);
+        } else {
+          // Zone: add zone
+          addRepresentation('block', parentHash);
+        }
+
+        if (newItems.length === 0) return prevItems;
+
+        if (decimalNumber > maxHeightRef.current) {
+          maxHeightRef.current = decimalNumber;
+        }
+
+        return [...prevItems, ...newItems].sort((a, b) => (a.number || 0) - (b.number || 0));
       }
-      
-      return [...prevItems, newItem].sort((a, b) => (a.number || 0) - (b.number || 0));
     });
   }, []);
 
@@ -121,7 +168,7 @@ const ChainVisualizer = () => {
         jsonrpc: '2.0',
         id: requestId,
         method: 'quai_getBlockByHash',
-        params: [hash, false]
+        params: [hash, true]
       }));
 
       setTimeout(() => {
@@ -149,10 +196,11 @@ const ChainVisualizer = () => {
       const blockData = await fetchBlockByHash(parentHash);
       if (blockData && blockData.woHeader) {
         const hash = blockData.hash;
-        const parentHash = blockData.woHeader.parentHash;
+        const zoneParent = blockData.woHeader.parentHash;
         const number = blockData.woHeader.number;
         const order = blockData.order;
-        addItem('block', hash, parentHash, number, order);
+        const headerParentHashes = blockData.header ? blockData.header.parentHash : [];
+        addItem('block', hash, zoneParent, number, order, headerParentHashes);
       }
     } catch (error) {
       console.error(`Failed to fetch parent ${parentHash}:`, error);
@@ -166,7 +214,7 @@ const ChainVisualizer = () => {
     if (!wsConnection || !isConnected) return;
     
     try {
-      const response = await fetch('http://24.243.151.245/cyprus1', {
+      const response = await fetch('', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -182,20 +230,21 @@ const ChainVisualizer = () => {
       const data = await response.json();
       if (data.result && data.result.hash && data.result.woHeader) {
         const hash = data.result.hash;
-        const parentHash = data.result.woHeader.parentHash;
+        const zoneParent = data.result.woHeader.parentHash;
         const number = data.result.woHeader.number;
         const order = data.result.order;
+        const headerParentHashes = data.result.header ? data.result.header.parentHash : [];
         
-        console.log('✅ Polled latest block:', hash, 'parent:', parentHash, 'number:', number, 'order:', order);
+        console.log('✅ Polled latest block:', hash, 'zone parent:', zoneParent, 'number:', number, 'order:', order, 'header parents:', headerParentHashes);
         setTipBlockHeight(parseInt(number, 16));
-        addItem('block', hash, parentHash, number, order);
+        addItem('block', hash, zoneParent, number, order, headerParentHashes);
         
         if (data.result.uncles && data.result.uncles.length > 0) {
           console.log('Found uncles:', data.result.uncles.length);
           data.result.uncles.forEach((uncle, index) => {
             console.log(`Uncle ${index}:`, uncle);
-            if (uncle.headerHash && uncle.parentHash) {
-              addItem('uncle', uncle.headerHash, uncle.parentHash, uncle.number);
+            if (uncle.hash && uncle.parentHash) {
+              addItem('uncle', uncle.hash, uncle.parentHash, uncle.number, null, null, hash);
             }
           });
         }
@@ -204,8 +253,8 @@ const ChainVisualizer = () => {
           console.log('Found workshares in block:', data.result.workshares.length);
           data.result.workshares.forEach((workshare, index) => {
             console.log(`Workshare ${index}:`, workshare);
-            if (workshare.headerHash && workshare.parentHash) {
-              addItem('workshare', workshare.headerHash, workshare.parentHash, workshare.number);
+            if (workshare.hash && workshare.parentHash) {
+              addItem('workshare', workshare.hash, workshare.parentHash, workshare.number, null, null, hash);
             }
           });
         }
@@ -219,7 +268,7 @@ const ChainVisualizer = () => {
   useEffect(() => {
     const connectWebSocket = () => {
       try {
-        const ws = new WebSocket('ws://24.243.151.245/ws/cyprus1');
+        const ws = new WebSocket('');
         
         ws.onopen = () => {
           console.log('WebSocket connected');
@@ -312,13 +361,13 @@ const ChainVisualizer = () => {
     const addedParent = prevMinHeightRef.current !== null && minHeight < prevMinHeightRef.current;
     const addedNewTip = currentMaxHeight > prevMaxHeightRef.current;
 
-    // Base Y positions by type
+    // Base Y positions for chains
     const typeBaseY = {
-      block: 200,
-      primeBlock: 200,
-      regionBlock: 200,
-      uncle: 200 + maxBlockSize + 50,
-      workshare: 200 + 2 * (maxBlockSize + 50),
+      primeBlock: 100,
+      regionBlock: 250,
+      block: 400, // zone
+      uncle: 400 + maxBlockSize + 50,
+      workshare: 400 + 2 * (maxBlockSize + 50),
     };
 
     // Group items by height for stacking calculation
@@ -331,6 +380,22 @@ const ChainVisualizer = () => {
       d => d.fullParentHash
     );
 
+    // Compute max chain size per height
+    const heightToMaxChainSize = new Map();
+    for (const [height, group] of heightToItems) {
+      const chainGroup = group.filter(i => ['block', 'primeBlock', 'regionBlock'].includes(i.type));
+      if (chainGroup.length > 0) {
+        const maxSize = Math.max(...chainGroup.map(i => {
+          let base = config.sizes.zone;
+          if (i.type === 'primeBlock') base = config.sizes.prime;
+          else if (i.type === 'regionBlock') base = config.sizes.region;
+          const count = workshareCounts.get(i.fullHash) || 0;
+          return base * (1 + 0.1 * count);
+        }));
+        heightToMaxChainSize.set(height, maxSize);
+      }
+    }
+
     // Compute positionedItems with displayX and displayY
     const positionedItems = items.map(item => {
       let baseSize = config.sizes.zone;
@@ -341,34 +406,50 @@ const ChainVisualizer = () => {
       let size = baseSize;
       if (['block', 'primeBlock', 'regionBlock'].includes(item.type)) {
         const count = workshareCounts.get(item.fullHash) || 0;
-        size = baseSize * (1 + 0.2 * count);
+        size = baseSize * (1 + 0.1 * count);
       }
 
-      let displayX, displayY;
+      let displayX = 0, displayY;
 
       if (item.number === null) {
         displayX = -size;
         displayY = Math.random() * 400 + 100;
       } else {
         const relativeHeight = item.number - minHeight;
-        displayX = relativeHeight * (maxBlockSize + config.spacing) + 100;
+        const baseX = relativeHeight * (maxBlockSize + config.spacing) + 100;
 
         const sameHeightItems = heightToItems.get(item.number) || [];
-        // Group blocks (zone/region/prime) as same "type" for stacking
-        const sameTypeItems = sameHeightItems.filter(i => 
-          i.type === item.type || 
-          (['block', 'primeBlock', 'regionBlock'].includes(i.type) && ['block', 'primeBlock', 'regionBlock'].includes(item.type))
-        );
-        // Find index for stacking (assumes items are in add order)
+        const sameTypeItems = sameHeightItems.filter(i => i.type === item.type);
         const index = sameTypeItems.findIndex(i => i.id === item.id);
         
         const baseY = typeBaseY[item.type] || 200;
         const stackedY = baseY + index * (maxBlockSize + 20);
         displayY = stackedY - size / 2;
+
+        if (['primeBlock', 'regionBlock', 'block'].includes(item.type)) {
+          const heightMax = heightToMaxChainSize.get(item.number) || maxBlockSize;
+          displayX = baseX + (heightMax - size) / 2;
+        } else {
+          displayX = baseX; // temporary, will adjust later
+        }
       }
 
       return { ...item, displayX, displayY, size };
     });
+
+    // Adjust displayX for uncles and workshares to center under zone
+    positionedItems.forEach(item => {
+      if (['uncle', 'workshare'].includes(item.type) && item.number !== null) {
+        const zone = positionedItems.find(p => p.number === item.number && p.type === 'block');
+        if (zone) {
+          item.displayX = zone.displayX + (zone.size - item.size) / 2;
+        }
+      }
+    });
+
+    // Group coincident blocks for vertical lines (same number and fullHash, different types)
+    const coincidentGroups = Array.from(d3.group(positionedItems, d => d.number + '-' + d.fullHash).values())
+      .filter(group => group.length > 1 && group.every(g => ['primeBlock', 'regionBlock', 'block'].includes(g.type)));
 
     // Get or create main group for zoom/pan
     let mainGroup = svg.select('.main-group');
@@ -404,7 +485,8 @@ const ChainVisualizer = () => {
 
     // Draw arrows FIRST (so they appear behind blocks)
     const arrowData = positionedItems.filter(item => {
-      const parent = positionedItems.find(p => p.fullHash === item.fullParentHash);
+      const parentType = ['primeBlock', 'regionBlock', 'block'].includes(item.type) ? item.type : 'block';
+      const parent = positionedItems.find(p => p.fullHash === item.fullParentHash && p.type === parentType);
       return parent && item.fullParentHash !== '0x0000000000000000000000000000000000000000000000000000000000000000';
     });
 
@@ -419,16 +501,18 @@ const ChainVisualizer = () => {
       .attr('stroke', config.colors.arrow)
       .attr('stroke-width', 2)
       .attr('marker-end', 'url(#arrowhead)')
-      .attr('x1', d => {
-        const parent = positionedItems.find(p => p.fullHash === d.fullParentHash);
+      .attr('x1', d => d.displayX)
+      .attr('y1', d => d.displayY + d.size / 2)
+      .attr('x2', d => {
+        const parentType = ['primeBlock', 'regionBlock', 'block'].includes(d.type) ? d.type : 'block';
+        const parent = positionedItems.find(p => p.fullHash === d.fullParentHash && p.type === parentType);
         return parent ? parent.displayX + parent.size : d.displayX;
       })
-      .attr('y1', d => {
-        const parent = positionedItems.find(p => p.fullHash === d.fullParentHash);
+      .attr('y2', d => {
+        const parentType = ['primeBlock', 'regionBlock', 'block'].includes(d.type) ? d.type : 'block';
+        const parent = positionedItems.find(p => p.fullHash === d.fullParentHash && p.type === parentType);
         return parent ? parent.displayY + parent.size / 2 : d.displayY;
       })
-      .attr('x2', d => d.displayX)
-      .attr('y2', d => d.displayY + d.size / 2)
       .style('opacity', 0);
 
     const arrowsUpdate = arrowsEnter.merge(arrows);
@@ -436,19 +520,94 @@ const ChainVisualizer = () => {
     arrowsUpdate
       .transition('arrow')
       .duration(300)
-      .attr('x1', d => {
-        const parent = positionedItems.find(p => p.fullHash === d.fullParentHash);
+      .attr('x1', d => d.displayX)
+      .attr('y1', d => d.displayY + d.size / 2)
+      .attr('x2', d => {
+        const parentType = ['primeBlock', 'regionBlock', 'block'].includes(d.type) ? d.type : 'block';
+        const parent = positionedItems.find(p => p.fullHash === d.fullParentHash && p.type === parentType);
         return parent ? parent.displayX + parent.size : d.displayX;
       })
-      .attr('y1', d => {
-        const parent = positionedItems.find(p => p.fullHash === d.fullParentHash);
+      .attr('y2', d => {
+        const parentType = ['primeBlock', 'regionBlock', 'block'].includes(d.type) ? d.type : 'block';
+        const parent = positionedItems.find(p => p.fullHash === d.fullParentHash && p.type === parentType);
         return parent ? parent.displayY + parent.size / 2 : d.displayY;
       })
-      .attr('x2', d => d.displayX)
-      .attr('y2', d => d.displayY + d.size / 2)
       .style('opacity', 0.8);
 
-    // Update blocks AFTER arrows (so they appear on top)
+    // Draw inclusion arrows for uncles and workshares
+    const inclusionData = positionedItems.filter(item => item.includedIn && ['uncle', 'workshare'].includes(item.type)).map(item => {
+      const includingBlock = positionedItems.find(p => p.fullHash === item.includedIn && p.type === 'block');
+      if (includingBlock) {
+        return {
+          id: 'inclusion-' + item.id,
+          x1: includingBlock.displayX + includingBlock.size / 2,
+          y1: includingBlock.displayY + includingBlock.size,
+          x2: item.displayX + item.size / 2,
+          y2: item.displayY
+        };
+      }
+      return null;
+    }).filter(d => d !== null);
+
+    const inclusionArrows = mainGroup.selectAll('.inclusion')
+      .data(inclusionData, d => d.id);
+
+    inclusionArrows.exit().remove();
+
+    inclusionArrows.enter()
+      .append('line')
+      .attr('class', 'inclusion')
+      .attr('stroke', config.colors.arrow)
+      .attr('stroke-width', 2)
+      .attr('marker-end', 'url(#arrowhead)')
+      .attr('x1', d => d.x1)
+      .attr('y1', d => d.y1)
+      .attr('x2', d => d.x2)
+      .attr('y2', d => d.y2)
+      .style('opacity', 0)
+      .merge(inclusionArrows)
+      .transition('inclusion')
+      .duration(300)
+      .attr('x1', d => d.x1)
+      .attr('y1', d => d.y1)
+      .attr('x2', d => d.x2)
+      .attr('y2', d => d.y2)
+      .style('opacity', 0.8);
+
+    // Draw vertical coincident lines between blocks
+    const coincidentData = [];
+    coincidentGroups.forEach(group => {
+      const sorted = group.sort((a, b) => typeBaseY[a.type] - typeBaseY[b.type]);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const upper = sorted[i];
+        const lower = sorted[i + 1];
+        coincidentData.push({
+          id: 'coincident-' + upper.id + '-to-' + lower.id,
+          x: upper.displayX + upper.size / 2,
+          y1: upper.displayY + upper.size,
+          y2: lower.displayY
+        });
+      }
+    });
+
+    const coincidentLines = mainGroup.selectAll('.coincident')
+      .data(coincidentData, d => d.id);
+
+    coincidentLines.exit().remove();
+
+    coincidentLines.enter()
+      .append('line')
+      .attr('class', 'coincident')
+      .attr('stroke', config.colors.coincident)
+      .attr('stroke-width', 2)
+      .attr('stroke-dasharray', '5,5')
+      .merge(coincidentLines)
+      .attr('x1', d => d.x)
+      .attr('x2', d => d.x)
+      .attr('y1', d => d.y1)
+      .attr('y2', d => d.y2);
+
+    // Update blocks AFTER arrows and lines
     const blocks = mainGroup.selectAll('.block')
       .data(positionedItems, d => d.id);
 
@@ -489,7 +648,7 @@ const ChainVisualizer = () => {
       .attr('x', d => d.size / 2)
       .attr('y', d => d.size / 2 - 5)
       .attr('text-anchor', 'middle')
-      .attr('fill', d => d.type === 'regionBlock' ? '#000' : config.colors.text)
+      .attr('fill', config.colors.text)
       .attr('font-family', 'monospace')
       .attr('font-size', '10px')
       .text(d => d.hash)
@@ -505,7 +664,7 @@ const ChainVisualizer = () => {
       .attr('x', d => d.size / 2)
       .attr('y', d => d.size / 2 + 8)
       .attr('text-anchor', 'middle')
-      .attr('fill', d => d.type === 'regionBlock' ? '#000' : config.colors.text)
+      .attr('fill', config.colors.text)
       .attr('font-family', 'monospace')
       .attr('font-size', '9px')
       .text(d => d.number !== null ? `#${d.number}` : '')
@@ -521,7 +680,7 @@ const ChainVisualizer = () => {
       .attr('x', d => d.size / 2)
       .attr('y', -5)
       .attr('text-anchor', 'middle')
-      .attr('fill', d => d.type === 'regionBlock' ? '#000' : config.colors.text)
+      .attr('fill', config.colors.text)
       .attr('font-family', 'sans-serif')
       .attr('font-size', '8px')
       .text(d => {
@@ -536,45 +695,23 @@ const ChainVisualizer = () => {
       .duration(400)
       .style('opacity', 1);
 
-    // Check for size increase and apply rotation shake if needed
+    // Check for size increase and apply shake if needed
     blocksUpdate.each(function(d) {
       const group = d3.select(this);
       const rect = group.select('rect');
       const prevSize = rect.empty() ? 0 : +rect.attr('width');
       if (d.size > prevSize) {
-        // Stop any existing transitions first
-        group.interrupt();
-        
-        // Apply rotation shake animation - wiggling left and right
         group.transition('shake')
-          .duration(1500)
+          .duration(600)
           .attrTween('transform', function() {
             return function(t) {
-              const frequency = 15; // Number of oscillations
-              const maxAngle = 8; // Maximum rotation angle in degrees
-              const decay = 1 - t; // Decay over time
-              
-              // Oscillating rotation angle
-              const angle = Math.sin(t * Math.PI * frequency) * maxAngle * decay;
-              
-              return `translate(${d.displayX}, ${d.displayY}) rotate(${angle}, ${d.size / 2}, ${d.size / 2})`;
+              const wiggle = Math.sin(t * Math.PI * 8) * 3 * (1 - t);
+              return `translate(${d.displayX + wiggle}, ${d.displayY})`;
             };
           })
           .on('end', function() {
-            // Ensure final position and rotation are exact
             group.attr('transform', `translate(${d.displayX}, ${d.displayY})`);
           });
-        
-        // Add a brief flash effect to make it even more noticeable
-        group.select('rect')
-          .transition('flash')
-          .duration(200)
-          .attr('stroke', '#FFD700')
-          .attr('stroke-width', 4)
-          .transition('flash-back')
-          .duration(300)
-          .attr('stroke', '#fff')
-          .attr('stroke-width', 1);
       }
     });
 
@@ -613,10 +750,9 @@ const ChainVisualizer = () => {
         
         // Show tooltip
         const tooltip = svg.append('g')
-          .attr('class', 'tooltip')
-          .attr('transform', `translate(${d.displayX + d.size + 10}, ${d.displayY})`);
+          .attr('class', 'tooltip');
         
-        const rect = tooltip.append('rect')
+        const tooltipRect = tooltip.append('rect')
           .attr('fill', 'rgba(0,0,0,0.8)')
           .attr('stroke', '#fff')
           .attr('rx', 5);
@@ -634,7 +770,12 @@ const ChainVisualizer = () => {
         text.append('tspan').attr('x', 10).attr('dy', 15).text(`Type: ${d.type}`);
         
         const bbox = text.node().getBBox();
-        rect.attr('width', bbox.width + 20).attr('height', bbox.height + 20);
+        tooltipRect.attr('width', bbox.width + 20).attr('height', bbox.height + 20).attr('x', -10).attr('y', -20 + 10);
+        
+        // Position tooltip above the block, centered
+        const tooltipX = d.displayX + d.size / 2 - (bbox.width + 20) / 2;
+        const tooltipY = d.displayY - (bbox.height + 20) - 10;
+        tooltip.attr('transform', `translate(${tooltipX}, ${tooltipY})`);
       })
       .on('mouseout', function() {
         d3.select(this).select('rect')
