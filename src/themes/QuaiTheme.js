@@ -17,6 +17,9 @@ export default class QuaiTheme {
     this.starshipIdCounter = 0;
     this.lastStarshipSpawn = 0;
     this.spawnInterval = 8000; // Spawn new starship every 8 seconds
+    
+    // Store original background to restore later
+    this.originalBackground = scene.background;
   }
 
   init() {
@@ -1210,5 +1213,10 @@ export default class QuaiTheme {
       if (effect.material) effect.material.dispose();
     });
     this.exhaustEffects = [];
+    
+    // Restore original background
+    if (this.originalBackground !== undefined) {
+      this.scene.background = this.originalBackground;
+    }
   }
 }

@@ -41,7 +41,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
   const mouseRef = useRef(new THREE.Vector2());
   const [hoveredBlock, setHoveredBlock] = useState(null);
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: '' });
-  const [currentTheme, setCurrentTheme] = useState('normal');
+  const [currentTheme, setCurrentTheme] = useState(mode === 'mainnet' ? 'space' : 'quai');
   const currentThemeRef = useRef(null);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [volume, setVolume] = useState(0.3);
@@ -108,8 +108,14 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     quai: '/music/sandstorm.mp3'
   }), []);
 
+
   // Audio control functions
   const playThemeMusic = useCallback((themeName) => {
+    if (!audioEnabled) {
+      console.log('Audio not enabled');
+      return;
+    }
+
     // Stop current audio
     if (audioRef.current) {
       audioRef.current.pause();
@@ -123,13 +129,14 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
         audioRef.current.volume = volume;
         audioRef.current.loop = true;
         audioRef.current.play().catch(error => {
-          console.log('Could not play theme music:', error);
+          console.log('Could not play theme music (user interaction may be required):', error);
         });
+        console.log('🎵 Attempting to play:', musicFile);
       } catch (error) {
         console.log('Error loading theme music:', error);
       }
     }
-  }, [volume, themeMusic]);
+  }, [volume, themeMusic, audioEnabled]);
 
   const stopThemeMusic = useCallback(() => {
     if (audioRef.current) {
@@ -318,10 +325,30 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     }
   }, [volume]);
 
-  // Handle theme music changes
+  // Handle theme music changes (only when scene is ready)
   useEffect(() => {
-    playThemeMusic(currentTheme);
-  }, [currentTheme, playThemeMusic]);
+    if (sceneReady) {
+      playThemeMusic(currentTheme);
+    }
+  }, [currentTheme, playThemeMusic, sceneReady]);
+
+  // Update theme when mode changes
+  useEffect(() => {
+    const defaultTheme = mode === 'mainnet' ? 'space' : 'quai';
+    if (currentTheme !== defaultTheme) {
+      console.log('🔄 Mode changed, switching to default theme:', defaultTheme);
+      setCurrentTheme(defaultTheme);
+    }
+  }, [mode, currentTheme]);
+
+  // Initialize theme when scene becomes ready
+  useEffect(() => {
+    if (sceneReady && currentTheme !== 'normal') {
+      console.log('🎨 Initializing theme on scene ready:', currentTheme);
+      switchTheme(currentTheme);
+    }
+  }, [sceneReady, currentTheme, switchTheme]);
+
 
   // Three.js 3D Initialization
   useEffect(() => {
@@ -432,6 +459,10 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
       
       // Force an update
       controls.update();
+      
+      // Now mark scene as ready since controls are properly initialized
+      setSceneReady(true);
+      console.log('✅ Scene marked as ready');
     }, 100); // 100ms delay to ensure DOM is ready
     
     // Add lighting
@@ -451,11 +482,6 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     const raycaster = new THREE.Raycaster();
     raycasterRef.current = raycaster;
     
-    
-    // Mark scene as ready
-    setSceneReady(true);
-    console.log('✅ Scene marked as ready');
-    
     // Animation loop with smooth scrolling
     let frameCount = 0;
     let lastBlockCount = 0;
@@ -463,7 +489,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
       requestAnimationFrame(animate);
       
       // Continuous scrolling animation - blocks keep moving
-      scrollOffsetRef.current += config.scrollSpeed; // Constant scroll speed
+      scrollOffsetRef.current += config.scrollSpeed;
       
       // Update theme animations
       if (currentThemeRef.current && currentThemeRef.current.updateAnimations) {
@@ -1178,6 +1204,27 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
         isNewWorkshare: item.type === 'workshare',
         animationStartTime: item.type === 'workshare' ? Date.now() : null
       };
+      
+      // Reposition chain when zone blocks are created (like recenter but no camera move)
+      if (item.type === 'block') { // zone blocks
+        // Get all blocks with original positions
+        const blockChildren = sceneRef.current.children.filter(child => 
+          child.userData.isBlock && child.userData.originalPosition
+        );
+        
+        if (blockChildren.length > 0) {
+          // Find the range of original X positions
+          const originalXPositions = blockChildren.map(child => child.userData.originalPosition.x);
+          const minOriginalX = Math.min(...originalXPositions);
+          const maxOriginalX = Math.max(...originalXPositions);
+          
+          // Adjust scroll offset to keep newest blocks (rightmost) in view
+          // Position newest blocks around x=0 to x=400 in screen space
+          const targetScrollOffset = maxOriginalX - 200;
+          scrollOffsetRef.current = targetScrollOffset;
+          targetScrollOffsetRef.current = targetScrollOffset;
+        }
+      }
       
       // Animate new blocks and workshares in Quai theme
       if (currentTheme === 'quai' && currentThemeRef.current && currentThemeRef.current.animateBlock) {
