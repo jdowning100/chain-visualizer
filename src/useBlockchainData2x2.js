@@ -16,51 +16,50 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
   // 2x2 hierarchy network configuration
   const networkConfig = {
     prime: {
-      ws: 'ws://demo.rpc.quai.network:8001',
-      http: 'http://demo.rpc.quai.network:9001',
+      ws: 'wss://demo.rpc.quai.network/prime/ws/',
+      http: 'https://demo.rpc.quai.network/prime/http/',
       name: 'Prime'
     },
     regions: [
       {
-        ws: 'ws://demo.rpc.quai.network:8002',
-        http: 'http://demo.rpc.quai.network:9002',
+        ws: 'wss://demo.rpc.quai.network/region0/ws/',
+        http: 'https://demo.rpc.quai.network/region0/http/',
         name: 'Region-0'
       },
       {
-        ws: 'ws://demo.rpc.quai.network:8003',
-        http: 'http://demo.rpc.quai.network:9003',
+        ws: 'wss://demo.rpc.quai.network/region1/ws/',
+        http: 'https://demo.rpc.quai.network/region1/http/',
         name: 'Region-1'
       }
     ],
     zones: [
-      // Region 1 zones
       {
-        ws: 'ws://demo.rpc.quai.network:8200',
-        http: 'http://demo.rpc.quai.network:9200',
+        ws: 'wss://demo.rpc.quai.network/zone00/ws/',
+        http: 'https://demo.rpc.quai.network/zone00/http/',
         name: 'Zone-0-0',
         region: 0
       },
       {
-        ws: 'ws://demo.rpc.quai.network:8201',
-        http: 'http://demo.rpc.quai.network:9201',
+        ws: 'wss://demo.rpc.quai.network/zone01/ws/',
+        http: 'https://demo.rpc.quai.network/zone01/http/',
         name: 'Zone-0-1',
         region: 0
       },
-      // Region 2 zones
       {
-        ws: 'ws://demo.rpc.quai.network:8220',
-        http: 'http://demo.rpc.quai.network:9220',
+        ws: 'wss://demo.rpc.quai.network/zone10/ws/',
+        http: 'https://demo.rpc.quai.network/zone10/http/',
         name: 'Zone-1-0',
         region: 1
       },
       {
-        ws: 'ws://demo.rpc.quai.network:8221',
-        http: 'http://demo.rpc.quai.network:9221',
+        ws: 'wss://demo.rpc.quai.network/zone11/ws/',
+        http: 'https://demo.rpc.quai.network/zone11/http/',
         name: 'Zone-1-1',
         region: 1
       }
     ]
   };
+  
 
   // Cleanup function to keep only the most recent items
   const cleanupOldItems = useCallback((itemsList) => {
