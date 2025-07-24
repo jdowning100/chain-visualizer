@@ -90,7 +90,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
   // 3D Configuration - continuous spacing layout
   const config = useMemo(() => ({
     spacing: 0.09,             // Spacing per millisecond for timestamp-based positioning
-    scrollSpeed: 0.45,        // Pixels per frame for continuous scroll
+    scrollSpeed: 1.85,        // Pixels per frame for continuous scroll
     arrowLength: 30,
     colors: getThemeColors(currentTheme),
     sizes: {
@@ -104,7 +104,8 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
   const themeMusic = useMemo(() => ({
     normal: null,
     space: '/music/shooting-stars.mp3',
-    tron: '/music/tron-theme.mp3' // To be added
+    tron: '/music/son-of-flynn.mp3',
+    quai: '/music/sandstorm.mp3'
   }), []);
 
   // Audio control functions

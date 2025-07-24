@@ -35,7 +35,7 @@ export const themeConfigs = {
     description: 'Futuristic digital grid world with light cycles and data streams'
   },
   quai: {
-    name: 'Quai',
-    description: 'Glass-like blocks with glowing red effects and textured surfaces'
+    name: 'Mars',
+    description: 'Mars landscape with red terrain, rocky formations, and atmospheric dust'
   },
 };
