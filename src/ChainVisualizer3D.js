@@ -90,7 +90,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
   // 3D Configuration - continuous spacing layout
   const config = useMemo(() => ({
     spacing: 0.09,             // Spacing per millisecond for timestamp-based positioning
-    scrollSpeed: 1.85,        // Pixels per frame for continuous scroll
+    scrollSpeed: .5,        // Pixels per frame for continuous scroll
     arrowLength: 30,
     colors: getThemeColors(currentTheme),
     sizes: {

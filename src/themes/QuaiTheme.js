@@ -12,6 +12,11 @@ export default class QuaiTheme {
     this.mountains = [];
     this.cityStructures = [];
     this.cityLights = [];
+    this.starships = [];
+    this.exhaustEffects = [];
+    this.starshipIdCounter = 0;
+    this.lastStarshipSpawn = 0;
+    this.spawnInterval = 8000; // Spawn new starship every 8 seconds
   }
 
   init() {
@@ -59,6 +64,12 @@ export default class QuaiTheme {
     
     // Create Mars city in the distance
     this.createMarsCity();
+    
+    // Create Starship rockets
+    this.createStarships();
+    
+    // Initialize spawn timer
+    this.lastStarshipSpawn = Date.now();
   }
   
   
@@ -536,6 +547,232 @@ export default class QuaiTheme {
     this.scene.add(this.dustParticles);
   }
   
+  createStarships() {
+    // Create Starship Heavy rockets near each city
+    const cityCenters = [
+      { x: -3500, z: -4500, radius: 800 },
+      { x: 2500, z: -5000, radius: 900 }
+    ];
+    
+    cityCenters.forEach((center, cityIndex) => {
+      // Create 2-3 starships per city
+      const starshipCount = 2 + Math.floor(Math.random() * 2);
+      
+      for (let i = 0; i < starshipCount; i++) {
+        const starship = this.createStarshipHeavy();
+        
+        // Position around city perimeter
+        const angle = (i / starshipCount) * Math.PI * 2 + Math.random() * 0.5;
+        const distance = center.radius + 300 + Math.random() * 400;
+        
+        starship.position.set(
+          center.x + Math.cos(angle) * distance,
+          -600,
+          center.z + Math.sin(angle) * distance
+        );
+        
+        // Start with arriving from space or landed
+        const isArriving = Math.random() > 0.5;
+        starship.userData = {
+          isStarship: true,
+          id: this.starshipIdCounter++,
+          cityIndex,
+          animationPhase: isArriving ? 'arriving' : 'landed',
+          animationTime: Date.now(),
+          landingPadY: -600,
+          landedTime: isArriving ? null : Date.now(),
+          landingDuration: 10000 + Math.random() * 15000, // Stay landed 10-25 seconds
+          arrivalHeight: 2000 + Math.random() * 1000,
+          departureHeight: 3000 + Math.random() * 1000
+        };
+        
+        // If arriving, start from high altitude
+        if (isArriving) {
+          starship.position.y = starship.userData.arrivalHeight;
+        }
+        
+        this.starships.push(starship);
+        this.scene.add(starship);
+        
+        // Create exhaust effect
+        this.createExhaustEffect(starship);
+      }
+    });
+  }
+  
+  createStarshipHeavy() {
+    const starshipGroup = new THREE.Group();
+    
+    // Main body (cylindrical)
+    const bodyGeometry = new THREE.CylinderGeometry(25, 30, 200, 16);
+    const bodyMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xcccccc,
+      metalness: 0.9,
+      roughness: 0.1,
+      clearcoat: 0.8
+    });
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    body.position.y = 100;
+    starshipGroup.add(body);
+    
+    // Nose cone
+    const noseGeometry = new THREE.ConeGeometry(25, 80, 16);
+    const noseMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xaaaaaa,
+      metalness: 0.8,
+      roughness: 0.2
+    });
+    const nose = new THREE.Mesh(noseGeometry, noseMaterial);
+    nose.position.y = 240;
+    starshipGroup.add(nose);
+    
+    // Engine section
+    const engineGeometry = new THREE.CylinderGeometry(30, 35, 40, 16);
+    const engineMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x666666,
+      metalness: 0.9,
+      roughness: 0.3
+    });
+    const engines = new THREE.Mesh(engineGeometry, engineMaterial);
+    engines.position.y = -20;
+    starshipGroup.add(engines);
+    
+    // Landing legs (4 legs)
+    for (let i = 0; i < 4; i++) {
+      const legGroup = new THREE.Group();
+      
+      // Upper leg
+      const upperLegGeometry = new THREE.CylinderGeometry(2, 3, 60, 6);
+      const legMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0x888888,
+        metalness: 0.7,
+        roughness: 0.4
+      });
+      const upperLeg = new THREE.Mesh(upperLegGeometry, legMaterial);
+      upperLeg.position.y = -30;
+      upperLeg.rotation.z = Math.PI * 0.15;
+      legGroup.add(upperLeg);
+      
+      // Lower leg
+      const lowerLegGeometry = new THREE.CylinderGeometry(3, 4, 40, 6);
+      const lowerLeg = new THREE.Mesh(lowerLegGeometry, legMaterial);
+      lowerLeg.position.set(20, -80, 0);
+      lowerLeg.rotation.z = -Math.PI * 0.3;
+      legGroup.add(lowerLeg);
+      
+      // Foot pad
+      const footGeometry = new THREE.CylinderGeometry(8, 8, 4, 8);
+      const foot = new THREE.Mesh(footGeometry, legMaterial);
+      foot.position.set(35, -105, 0);
+      legGroup.add(foot);
+      
+      // Position legs around the rocket
+      const angle = (i / 4) * Math.PI * 2;
+      legGroup.position.set(
+        Math.cos(angle) * 25,
+        0,
+        Math.sin(angle) * 25
+      );
+      legGroup.rotation.y = angle;
+      
+      starshipGroup.add(legGroup);
+    }
+    
+    // Add SpaceX-style fins
+    for (let i = 0; i < 4; i++) {
+      const finGeometry = new THREE.BoxGeometry(2, 30, 15);
+      const finMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0x999999,
+        metalness: 0.8,
+        roughness: 0.2
+      });
+      const fin = new THREE.Mesh(finGeometry, finMaterial);
+      
+      const angle = (i / 4) * Math.PI * 2;
+      fin.position.set(
+        Math.cos(angle) * 30,
+        60,
+        Math.sin(angle) * 30
+      );
+      fin.rotation.y = angle;
+      
+      starshipGroup.add(fin);
+    }
+    
+    starshipGroup.castShadow = true;
+    starshipGroup.receiveShadow = true;
+    
+    return starshipGroup;
+  }
+  
+  createExhaustEffect(starship) {
+    // Create exhaust plume
+    const exhaustGeometry = new THREE.ConeGeometry(15, 80, 8, 1, true);
+    const exhaustMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff6600,
+      emissive: 0xff4400,
+      emissiveIntensity: 1.0,
+      transparent: true,
+      opacity: 0.0,
+      side: THREE.DoubleSide
+    });
+    
+    const exhaust = new THREE.Mesh(exhaustGeometry, exhaustMaterial);
+    exhaust.position.y = -80;
+    exhaust.rotation.x = Math.PI;
+    
+    starship.add(exhaust);
+    starship.userData.exhaust = exhaust;
+    
+    this.exhaustEffects.push(exhaust);
+  }
+  
+  spawnNewStarship() {
+    // Don't spawn too many starships
+    if (this.starships.length >= 8) return;
+    
+    // Choose a random city to spawn near
+    const cityCenters = [
+      { x: -3500, z: -4500, radius: 800 },
+      { x: 2500, z: -5000, radius: 900 }
+    ];
+    const center = cityCenters[Math.floor(Math.random() * cityCenters.length)];
+    
+    // Create new starship
+    const starship = this.createStarshipHeavy();
+    
+    // Position around city perimeter
+    const angle = Math.random() * Math.PI * 2;
+    const distance = center.radius + 300 + Math.random() * 400;
+    const arrivalHeight = 2000 + Math.random() * 1000;
+    
+    starship.position.set(
+      center.x + Math.cos(angle) * distance,
+      arrivalHeight,
+      center.z + Math.sin(angle) * distance
+    );
+    
+    // Set up as arriving starship
+    starship.userData = {
+      isStarship: true,
+      id: this.starshipIdCounter++,
+      cityIndex: Math.floor(Math.random() * cityCenters.length),
+      animationPhase: 'arriving',
+      animationTime: Date.now(),
+      landingPadY: -600,
+      landedTime: null,
+      landingDuration: 10000 + Math.random() * 15000,
+      arrivalHeight: arrivalHeight,
+      departureHeight: 3000 + Math.random() * 1000
+    };
+    
+    this.starships.push(starship);
+    this.scene.add(starship);
+    
+    // Create exhaust effect
+    this.createExhaustEffect(starship);
+  }
+  
   updateAnimations() {
     this.update();
     
@@ -558,6 +795,88 @@ export default class QuaiTheme {
       }
       this.dustParticles.geometry.attributes.position.needsUpdate = true;
     }
+    
+    // Spawn new starships periodically
+    const currentTime = Date.now();
+    if (currentTime - this.lastStarshipSpawn > this.spawnInterval) {
+      this.spawnNewStarship();
+      this.lastStarshipSpawn = currentTime;
+    }
+    
+    // Animate starships with removal system
+    const starshipsToRemove = [];
+    this.starships.forEach((starship, index) => {
+      const userData = starship.userData;
+      const elapsed = currentTime - userData.animationTime;
+      
+      let targetY, exhaustOpacity = 0;
+      
+      switch(userData.animationPhase) {
+        case 'arriving':
+          // Landing from space (3 second descent)
+          const landingProgress = Math.min(elapsed / 3000, 1);
+          targetY = userData.landingPadY + (1 - landingProgress) * userData.arrivalHeight;
+          exhaustOpacity = 0.7;
+          starship.rotation.z = Math.sin(currentTime * 0.01) * 0.03;
+          
+          if (landingProgress >= 1) {
+            userData.animationPhase = 'landed';
+            userData.landedTime = currentTime;
+            userData.animationTime = currentTime;
+          }
+          break;
+          
+        case 'landed':
+          // Sitting on landing pad
+          targetY = userData.landingPadY;
+          exhaustOpacity = 0;
+          starship.rotation.z = 0;
+          
+          // Check if it's time to depart
+          if (currentTime - userData.landedTime > userData.landingDuration) {
+            userData.animationPhase = 'departing';
+            userData.animationTime = currentTime;
+          }
+          break;
+          
+        case 'departing':
+          // Taking off to space (4 second ascent)
+          const departureProgress = Math.min(elapsed / 4000, 1);
+          targetY = userData.landingPadY + departureProgress * userData.departureHeight;
+          exhaustOpacity = 0.9;
+          starship.rotation.z = Math.sin(currentTime * 0.02) * 0.02;
+          
+          // Remove when it reaches space
+          if (departureProgress >= 1) {
+            starshipsToRemove.push(index);
+          }
+          break;
+      }
+      
+      // Smooth position interpolation
+      starship.position.y += (targetY - starship.position.y) * 0.03;
+      
+      // Update exhaust effect
+      if (userData.exhaust) {
+        userData.exhaust.material.opacity = exhaustOpacity;
+        if (exhaustOpacity > 0) {
+          const flicker = 0.8 + Math.sin(currentTime * 0.05 + userData.id) * 0.2;
+          userData.exhaust.material.emissiveIntensity = flicker;
+          userData.exhaust.scale.y = 0.8 + Math.sin(currentTime * 0.03 + userData.id) * 0.3;
+        }
+      }
+    });
+    
+    // Remove starships that have departed
+    starshipsToRemove.reverse().forEach(index => {
+      const starship = this.starships[index];
+      this.scene.remove(starship);
+      starship.traverse(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      });
+      this.starships.splice(index, 1);
+    });
     
     // Animate city lights
     const time = this.clock.getElapsedTime();
@@ -873,5 +1192,23 @@ export default class QuaiTheme {
       if (light.material) light.material.dispose();
     });
     this.cityLights = [];
+    
+    // Clean up starships
+    this.starships.forEach(starship => {
+      this.scene.remove(starship);
+      starship.traverse(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      });
+    });
+    this.starships = [];
+    
+    // Clean up exhaust effects
+    this.exhaustEffects.forEach(effect => {
+      this.scene.remove(effect);
+      if (effect.geometry) effect.geometry.dispose();
+      if (effect.material) effect.material.dispose();
+    });
+    this.exhaustEffects = [];
   }
 }
