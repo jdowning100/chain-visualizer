@@ -205,36 +205,31 @@ export default class QuaiTheme {
   animateBlock(block, chainType) {
     const startTime = Date.now();
     
-    // Set initial bright white-orange color (more filled appearance)
+    // Set initial bright white-orange color
     block.material.color.setHex(0xffeeaa);
     block.material.emissive.setHex(0xffcc88);
     block.material.emissiveIntensity = 0.6;
-    
-    // Set initial opacity to be more solid
     block.material.opacity = 0.9;
     block.material.transparent = true;
     
-    // Create and apply initial texture with squares
-    const initialTexture = this.createBlockTexture(256, 0);
-    block.material.map = initialTexture;
-    block.material.needsUpdate = true;
-    
-    // Store animation data
+    // Store animation data with optimized structure
     this.animatedBlocks.set(block, {
       startTime,
-      chainType
+      chainType,
+      lastUpdateFrame: 0,
+      redPhaseStarted: false
     });
     
-    // Add initial bright white-orange glow
+    // Add simplified glow effect
     const glowGeometry = new THREE.BoxGeometry(
-      block.geometry.parameters.width * 1.15,
-      block.geometry.parameters.height * 1.15,
-      block.geometry.parameters.depth * 1.15
+      block.geometry.parameters.width * 1.1,
+      block.geometry.parameters.height * 1.1,
+      block.geometry.parameters.depth * 1.1
     );
     const glowMaterial = new THREE.MeshBasicMaterial({
       color: 0xffcc88,
-      transparent: false,
-      opacity: 0.8,
+      transparent: true,
+      opacity: 0.6,
       side: THREE.BackSide
     });
     const glow = new THREE.Mesh(glowGeometry, glowMaterial);
@@ -245,148 +240,92 @@ export default class QuaiTheme {
   
   update() {
     const currentTime = Date.now();
+    const blocksToRemove = [];
+    
     for (const [block, data] of this.animatedBlocks) {
       const elapsed = (currentTime - data.startTime) / 1000;
-      const progress = Math.min(elapsed / 3, 1); // 3 second animation
+      const progress = Math.min(elapsed / 2, 1); // Reduced to 2 seconds from 3
       
-      // Different final colors based on chain type
-      let finalRedColor, finalRedEmissive;
-      switch(data.chainType) {
-        case 'prime':
-          finalRedColor = new THREE.Color(0xff1100); // Bright pure red
-          finalRedEmissive = new THREE.Color(0xcc0000);
-          break;
-        case 'region':
-          finalRedColor = new THREE.Color(0xff4422); // Red-orange
-          finalRedEmissive = new THREE.Color(0xdd2200);
-          break;
-        case 'zone':
-          finalRedColor = new THREE.Color(0xff6644); // Light red-orange
-          finalRedEmissive = new THREE.Color(0xee3311);
-          break;
-        case 'workshare':
-          finalRedColor = new THREE.Color(0xffaa88); // Peachy red
-          finalRedEmissive = new THREE.Color(0xff7755);
-          break;
-        default:
-          finalRedColor = new THREE.Color(0xff3333); // Medium red
-          finalRedEmissive = new THREE.Color(0xdd1111);
+      // Use pre-calculated colors for better performance
+      if (!data.finalColor) {
+        switch(data.chainType) {
+          case 'prime':
+            data.finalColor = new THREE.Color(0xff1100);
+            data.finalEmissive = new THREE.Color(0xcc0000);
+            break;
+          case 'region':
+            data.finalColor = new THREE.Color(0xff4422);
+            data.finalEmissive = new THREE.Color(0xdd2200);
+            break;
+          case 'zone':
+            data.finalColor = new THREE.Color(0xff6644);
+            data.finalEmissive = new THREE.Color(0xee3311);
+            break;
+          case 'workshare':
+            data.finalColor = new THREE.Color(0xffaa88);
+            data.finalEmissive = new THREE.Color(0xff7755);
+            break;
+          default:
+            data.finalColor = new THREE.Color(0xff3333);
+            data.finalEmissive = new THREE.Color(0xdd1111);
+        }
       }
       
-      let currentColor, currentEmissive;
-      
-      if (progress < 0.5) {
-        // First half: white-orange -> bright full orange (0 to 0.5 progress)
-        const halfProgress = progress * 2; // 0 to 1
-        const startColor = new THREE.Color(0xffeeaa); // Warm white-orange
-        const midColor = new THREE.Color(0xff8833); // Bright vibrant orange
-        const startEmissive = new THREE.Color(0xffcc88); // Warm emissive
-        const midEmissive = new THREE.Color(0xff6622); // Strong orange emissive
+      // Simplified 2-stage animation with fewer updates
+      if (progress < 0.6) {
+        // Orange phase - only update every 3rd frame for performance
+        if (!data.lastUpdateFrame || currentTime - data.lastUpdateFrame > 50) { // ~20 FPS updates instead of 60
+          const stageProgress = progress / 0.6;
+          const startColor = new THREE.Color(0xffeeaa);
+          const midColor = new THREE.Color(0xff8833);
+          
+          block.material.color.lerpColors(startColor, midColor, stageProgress);
+          block.material.emissive.setHex(0xff6622);
+          block.material.emissiveIntensity = 0.6 + (stageProgress * 0.4);
+          
+          data.lastUpdateFrame = currentTime;
+        }
+      } else if (progress < 1) {
+        // Red phase - fewer updates
+        if (!data.redPhaseStarted) {
+          data.redPhaseStarted = true;
+          // Remove texture early to avoid constant recreation
+          block.material.map = null;
+          block.material.needsUpdate = true;
+        }
         
-        currentColor = startColor.clone().lerp(midColor, halfProgress);
-        currentEmissive = startEmissive.clone().lerp(midEmissive, halfProgress);
-      } else {
-        // Second half: bright orange -> deep red (0.5 to 1.0 progress)
-        const halfProgress = (progress - 0.5) * 2; // 0 to 1
-        const midColor = new THREE.Color(0xff8833); // Bright orange
-        const midEmissive = new THREE.Color(0xff6622); // Strong orange emissive
-        
-        currentColor = midColor.clone().lerp(finalRedColor, halfProgress);
-        currentEmissive = midEmissive.clone().lerp(finalRedEmissive, halfProgress);
-      }
-      
-      block.material.color.copy(currentColor);
-      block.material.emissive.copy(currentEmissive);
-      
-      // Emissive intensity peaks during orange phase then reduces
-      if (progress < 0.5) {
-        // Increase intensity during orange phase
-        block.material.emissiveIntensity = 0.6 + (progress * 0.4); // 0.6 to 1.0
-      } else {
-        // Reduce intensity during red phase
-        block.material.emissiveIntensity = 1.0 - ((progress - 0.5) * 0.7); // 1.0 to 0.3
-      }
-      
-      // Create and update texture that shrinks over time
-      if (progress < 0.9) {
-        // Show texture during first 90% of animation
-        const texture = this.createBlockTexture(256, progress);
-        block.material.map = texture;
-      } else {
-        // Remove texture in final 10% for completely smooth finish
-        block.material.map = null;
-      }
-      block.material.needsUpdate = true;
-      
-      // Fade out glow over entire animation
-      if (block.userData.glow) {
-        const glowOpacity = 0.6 * (1 - progress);
-        block.userData.glow.material.opacity = glowOpacity;
-        // Glow color changes with main color
-        if (progress < 0.5) {
-          // White-orange to bright orange glow
-          const glowProgress = progress * 2;
-          const startGlow = new THREE.Color(0xffcc88);
-          const midGlow = new THREE.Color(0xff8833);
-          block.userData.glow.material.color.lerpColors(startGlow, midGlow, glowProgress);
-        } else {
-          // Bright orange to chain-specific red glow
-          const glowProgress = (progress - 0.5) * 2;
-          const midGlow = new THREE.Color(0xff8833);
-          let endGlow;
-          switch(data.chainType) {
-            case 'prime':
-              endGlow = new THREE.Color(0xff1100);
-              break;
-            case 'region':
-              endGlow = new THREE.Color(0xff4422);
-              break;
-            case 'zone':
-              endGlow = new THREE.Color(0xff6644);
-              break;
-            case 'workshare':
-              endGlow = new THREE.Color(0xffaa88);
-              break;
-            default:
-              endGlow = new THREE.Color(0xff3333);
+        if (!data.lastUpdateFrame || currentTime - data.lastUpdateFrame > 50) {
+          const stageProgress = (progress - 0.6) / 0.4;
+          const midColor = new THREE.Color(0xff8833);
+          
+          block.material.color.lerpColors(midColor, data.finalColor, stageProgress);
+          block.material.emissive.lerpColors(new THREE.Color(0xff6622), data.finalEmissive, stageProgress);
+          block.material.emissiveIntensity = 1.0 - (stageProgress * 0.7);
+          
+          // Update glow less frequently
+          if (block.userData.glow) {
+            block.userData.glow.material.opacity = 0.6 * (1 - progress);
+            block.userData.glow.scale.setScalar(1 + 0.15 * (1 - progress));
           }
-          block.userData.glow.material.color.lerpColors(midGlow, endGlow, glowProgress);
+          
+          data.lastUpdateFrame = currentTime;
         }
-        // Slight scale reduction as glow fades
-        block.userData.glow.scale.setScalar(1 + 0.15 * (1 - progress));
-      }
-      
-      // Start with higher opacity and gradually adjust for consistent fullness
-      const initialOpacity = 0.9; // Start more solid
-      const finalOpacity = 0.85; // Target glass opacity
-      
-      if (progress < 0.5) {
-        // Maintain high opacity during orange phase
-        block.material.opacity = initialOpacity;
-        // Minimal glass properties during orange phase
-        block.material.transmission = progress * 0.2;
-        block.material.thickness = progress * 0.4;
       } else {
-        // Slight opacity adjustment during red phase
-        const redProgress = (progress - 0.5) * 2;
-        block.material.opacity = initialOpacity - (redProgress * (initialOpacity - finalOpacity));
-        // Enhance glass properties during red phase
-        block.material.transmission = 0.2 + (redProgress * 0.3);
-        block.material.thickness = 0.4 + (redProgress * 0.8);
-      }
-      
-      // Clean up completed animations
-      if (progress >= 1) {
-        if (block.userData.glow) {
-          block.remove(block.userData.glow);
-          block.userData.glow = null;
-        }
-        // Ensure texture is completely removed for solid red cube
-        block.material.map = null;
-        block.material.needsUpdate = true;
-        this.animatedBlocks.delete(block);
+        // Animation complete
+        blocksToRemove.push(block);
       }
     }
+    
+    // Clean up completed animations in batch
+    blocksToRemove.forEach(block => {
+      if (block.userData.glow) {
+        block.remove(block.userData.glow);
+        block.userData.glow = null;
+      }
+      block.material.map = null;
+      block.material.needsUpdate = true;
+      this.animatedBlocks.delete(block);
+    });
   }
   
   getConnectionMaterial() {
@@ -459,11 +398,11 @@ export default class QuaiTheme {
     
     terrainGeometry.computeVertexNormals();
     
-    // Mars surface material
+    // Mars surface material - darker red
     const terrainMaterial = new THREE.MeshLambertMaterial({
-      color: 0xbb4422,
-      emissive: 0x331100,
-      emissiveIntensity: 0.2
+      color: 0x883311,
+      emissive: 0x221100,
+      emissiveIntensity: 0.15
     });
     
     this.terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
