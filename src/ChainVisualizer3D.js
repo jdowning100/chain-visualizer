@@ -44,6 +44,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
   const [currentTheme, setCurrentTheme] = useState(mode === 'mainnet' ? 'space' : 'quai');
   const [userSelectedTheme, setUserSelectedTheme] = useState(false);
   const currentThemeRef = useRef(null);
+  const modeRef = useRef(mode);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [volume, setVolume] = useState(0.3);
   const audioRef = useRef(null);
@@ -391,6 +392,11 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
     }
   }, [hasUserInteracted, userInteracted]);
 
+  // Keep modeRef current
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
   // Initialize theme when scene becomes ready
   useEffect(() => {
     if (sceneReady && currentTheme !== 'normal') {
@@ -532,8 +538,8 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(100, 200, 100);
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.mapSize.width = 1024; // Reduced from 2048 for better performance
+    directionalLight.shadow.mapSize.height = 1024;
     scene.add(directionalLight);
     
     
@@ -542,7 +548,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
     const raycaster = new THREE.Raycaster();
     raycasterRef.current = raycaster;
     
-    // Animation loop with smooth scrolling
+    // Animation loop with smooth scrolling and performance optimization
     let frameCount = 0;
     let lastBlockCount = 0;
     const animate = () => {
@@ -762,14 +768,16 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
           blockIntersect.object : blockIntersect.object.parent;
         const item = blockMesh.userData.item;
         
+        console.log('Block clicked:', item?.hash, 'mode:', modeRef.current, 'item.number:', item?.number);
+        
         // Only open QuaiScan for mainnet mode, not 2x2 demo
-        if (item && item.number && mode === 'mainnet') {
+        if (item && item.number && modeRef.current === 'mainnet') {
           // Open QuaiScan link
           const blockNumber = item.number;
           console.log('Opening QuaiScan for block:', blockNumber);
           window.open(`https://quaiscan.io/block/${blockNumber}`, '_blank');
-        } else if (mode === '2x2') {
-          console.log('QuaiScan disabled for 2x2 demo mode');
+        } else {
+          console.log('QuaiScan click blocked - mode:', modeRef.current, 'hasNumber:', !!item?.number);
         }
       }
     };

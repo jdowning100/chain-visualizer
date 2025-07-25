@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 const MaxBlocksToFetch = 10;
-const MaxItemsToKeep = 500; // Keep only the most recent 300 items for performance
+const MaxItemsToKeep = 300; // Reduced for better 3D rendering performance
 
 export const useBlockchainData2x2 = (isEnabled = false) => {
   const [items, setItems] = useState([]);
@@ -118,8 +118,6 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
           includedIn: includingHash || null,
           chainName: chainName
         };
-
-        console.log(`Added ${type}: ${shortHash} -> ${newItem.fullParentHash} (${decimalNumber}) on ${chainName} includedIn: ${newItem.includedIn}`);
         
         if (decimalNumber !== null && decimalNumber > maxHeightRef.current) {
           maxHeightRef.current = decimalNumber;
@@ -139,7 +137,6 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
           );
           
           if (!parentExists) {
-            console.log(`🔍 Missing parent detected for ${type} ${shortHash}, fetching: ${newItem.fullParentHash.slice(0, 8)}`);
             missingParentsRef.current.set(newItem.fullParentHash, true);
             fetchMissingParent(newItem.fullParentHash, chainName);
           }
@@ -152,8 +149,6 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
         const orderNum = parseInt(order, 16);
         const newItems = [];
         
-        console.log(`🏗️ Creating block representations for ${chainName}: hash=${shortHash}, order=${orderNum}, headerParents=${JSON.stringify(headerParentHashes)}`);
-
         let idCounter = 0;
         const addRepresentation = (blockType, parent) => {
           const existing = prevItems.find(item => item.fullHash === hash && item.type === blockType);
@@ -176,7 +171,6 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
           };
 
           newItems.push(item);
-          console.log(`➕ Added ${blockType}: ${shortHash} on ${chainName}`);
         };
 
         // For 2x2 demo, create representations based on chain name instead of order
@@ -232,7 +226,6 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
             );
             
             if (!parentExists) {
-              console.log(`🔍 Missing parent detected for ${newItem.type} ${shortHash}, fetching: ${newItem.fullParentHash.slice(0, 8)}`);
               missingParentsRef.current.set(newItem.fullParentHash, true);
               fetchMissingParent(newItem.fullParentHash, chainName);
             }
@@ -252,7 +245,6 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
 
     try {
       fetchingParentsRef.current.add(parentHash);
-      console.log(`🔍 Fetching missing parent ${parentHash.slice(0, 8)} via HTTP from ${chainName}`);
       
       // Find the appropriate HTTP URL based on chain name
       let httpUrl = networkConfig.prime.http; // Default fallback
@@ -318,7 +310,6 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
 
   // Poll for latest block from a specific chain
   const pollLatestBlock = useCallback(async (chainConfig, chainName) => {
-    console.log(`🔄 Polling ${chainName} at ${chainConfig.http}`);
     try {
       const response = await fetch(chainConfig.http, {
         method: 'POST',
@@ -334,7 +325,6 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
       });
       
       const data = await response.json();
-      console.log(`📊 Received data from ${chainName}:`, data.result ? 'Block found' : 'No result', data.error ? `Error: ${data.error.message}` : '');
       
       if (data.result && data.result.hash && data.result.woHeader) {
         const hash = data.result.hash;
@@ -373,17 +363,14 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
       return;
     }
 
-    console.log('🚀 Starting 2x2 WebSocket connections');
     const connections = {};
     let connectedCount = 0;
     
     const connectWebSocket = (config, chainName) => {
       try {
-        console.log(`🔗 Connecting to ${chainName}: ${config.ws}`);
         const ws = new WebSocket(config.ws);
         
         ws.onopen = () => {
-          console.log(`✅ ${chainName} WebSocket connected to ${config.ws}`);
           connectedCount++;
           connections[chainName] = ws;
           
@@ -394,7 +381,6 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
             setConnectionStatus('Connected');
             setWsConnections(connections);
             
-            console.log('🔄 Starting initial polls for all chains');
             // Initial polls for all chains
             setTimeout(() => {
               pollLatestBlock(networkConfig.prime, 'Prime');
