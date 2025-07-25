@@ -3,7 +3,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 const MaxBlocksToFetch = 10;
 const MaxItemsToKeep = 300; // Keep only the most recent 200 items for performance
 
-export const useBlockchainData = () => {
+export const useBlockchainData = (isEnabled = true) => {
   const [items, setItems] = useState([]);
   const [wsConnection, setWsConnection] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -335,6 +335,11 @@ export const useBlockchainData = () => {
 
   // WebSocket connection management
   useEffect(() => {
+    if (!isEnabled) {
+      console.log('⏸️ WebSocket connection disabled');
+      return;
+    }
+    
     console.log('🚀 Starting WebSocket connection');
     const connectWebSocket = () => {
       try {
@@ -401,7 +406,7 @@ export const useBlockchainData = () => {
         wsConnection.close();
       }
     };
-  }, [addItem]); // Remove pollLatestBlock from dependencies to avoid recreation
+  }, [addItem, isEnabled]); // Add isEnabled to dependencies
 
   // Set up polling interval
   useEffect(() => {

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import ChainVisualizer from './ChainVisualizer';
 import ChainVisualizer3D from './ChainVisualizer3D';
 import NavigationBar from './NavigationBar';
+import IntroModal from './IntroModal';
 import { useBlockchainData } from './useBlockchainData';
 import { useBlockchainData2x2 } from './useBlockchainData2x2';
 import './App.css';
@@ -9,10 +10,11 @@ import './App.css';
 function App() {
   const [currentView, setCurrentView] = useState('3d');
   const [current3DMode, setCurrent3DMode] = useState('mainnet'); // 'mainnet' or '2x2'
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
-  // Centralized blockchain data management
-  const blockchainData = useBlockchainData();
-  const blockchainData2x2 = useBlockchainData2x2(currentView === '3d' && current3DMode === '2x2');
+  // Centralized blockchain data management - only load data after user interaction
+  const blockchainData = useBlockchainData(hasUserInteracted);
+  const blockchainData2x2 = useBlockchainData2x2(currentView === '3d' && current3DMode === '2x2' && hasUserInteracted);
 
   const handleViewChange = (view) => {
     setCurrentView(view);
@@ -20,6 +22,10 @@ function App() {
 
   const handle3DModeChange = (mode) => {
     setCurrent3DMode(mode);
+  };
+
+  const handleModalConnect = () => {
+    setHasUserInteracted(true);
   };
 
   // Select appropriate blockchain data based on current mode
@@ -32,6 +38,9 @@ function App() {
 
   return (
     <div className="App">
+      {!hasUserInteracted && currentView === '3d' && (
+        <IntroModal onConnect={handleModalConnect} />
+      )}
       <NavigationBar 
         currentView={currentView} 
         onViewChange={handleViewChange} 
@@ -45,6 +54,7 @@ function App() {
           <ChainVisualizer3D 
             blockchainData={getActiveBlockchainData()} 
             mode={current3DMode}
+            hasUserInteracted={hasUserInteracted}
           />
         }
       </div>

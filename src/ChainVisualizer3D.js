@@ -6,7 +6,7 @@ import './ChainVisualizer.css';
 
 const MaxBlocksToFetch = 10;
 
-const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {  
+const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserInteracted = false }) => {  
   // Extract data from props
   const {
     items,
@@ -47,7 +47,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [volume, setVolume] = useState(0.3);
   const audioRef = useRef(null);
-  const [userInteracted, setUserInteracted] = useState(false);
+  const [userInteracted, setUserInteracted] = useState(hasUserInteracted);
 
   // Get theme-specific block colors
   const getThemeColors = useCallback((themeName) => {
@@ -150,6 +150,24 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
   // Theme switching function
   const switchTheme = useCallback((themeName) => {
     if (sceneRef.current) {
+      // Update background color based on theme
+      const backgroundColors = {
+        space: 0x000000,    // Black for space theme
+        tron: 0x0a0a0a,     // Very dark for tron theme  
+        quai: 0x1a1a1a,     // Dark grey for quai theme
+        normal: 0x1a1a1a    // Dark grey for normal theme
+      };
+      
+      const backgroundColor = backgroundColors[themeName] || backgroundColors.normal;
+      console.log('🎨 Setting background color for theme:', themeName, 'to:', backgroundColor.toString(16));
+      sceneRef.current.background = new THREE.Color(backgroundColor);
+      
+      // Also update renderer clear color if available
+      if (rendererRef.current) {
+        rendererRef.current.setClearColor(backgroundColor, 1.0);
+        console.log('🎨 Updated renderer clear color to:', backgroundColor.toString(16));
+      }
+      
       // Clean up all existing theme elements
       const themeElements = sceneRef.current.children.filter(child => 
         child.userData.isPlanet || child.userData.isSun || child.userData.isAsteroid || 
@@ -337,12 +355,12 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     }
   }, [volume]);
 
-  // Handle theme music changes (only when scene is ready)
+  // Handle theme music changes (only when scene is ready and user has interacted)
   useEffect(() => {
-    if (sceneReady) {
+    if (sceneReady && userInteracted) {
       playThemeMusic(currentTheme);
     }
-  }, [currentTheme, playThemeMusic, sceneReady]);
+  }, [currentTheme, playThemeMusic, sceneReady, userInteracted]);
 
   // Update theme when mode changes (only if user hasn't manually selected a theme)
   useEffect(() => {
@@ -357,13 +375,20 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     }
   }, [mode, userSelectedTheme]); // Remove currentTheme from dependencies to prevent infinite loop
 
-  // Initialize theme when scene becomes ready
+  // Sync user interaction state from parent
   useEffect(() => {
-    if (sceneReady && currentTheme !== 'normal') {
+    if (hasUserInteracted && !userInteracted) {
+      setUserInteracted(true);
+    }
+  }, [hasUserInteracted, userInteracted]);
+
+  // Initialize theme when scene becomes ready and user has interacted
+  useEffect(() => {
+    if (sceneReady && userInteracted) {
       console.log('🎨 Initializing theme on scene ready:', currentTheme);
       switchTheme(currentTheme);
     }
-  }, [sceneReady, currentTheme, switchTheme]);
+  }, [sceneReady, userInteracted, currentTheme, switchTheme]);
 
 
   // Three.js 3D Initialization
@@ -401,7 +426,16 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     
     // Initialize Three.js scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a1a);
+    // Set initial background color based on current theme
+    const initialBackgroundColors = {
+      space: 0x000000,    // Black for space theme
+      tron: 0x0a0a0a,     // Very dark for tron theme  
+      quai: 0x1a1a1a,     // Dark grey for quai theme
+      normal: 0x1a1a1a    // Dark grey for normal theme
+    };
+    const initialBackgroundColor = initialBackgroundColors[currentTheme] || initialBackgroundColors.normal;
+    console.log('🎬 Setting initial background color for theme:', currentTheme, 'to:', initialBackgroundColor.toString(16));
+    scene.background = new THREE.Color(initialBackgroundColor);
     sceneRef.current = scene;
     
     // Initialize camera with extended view range
@@ -428,7 +462,8 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     console.log('🖥️ Renderer size set to:', width, 'x', height);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.setClearColor(0x1a1a1a, 1.0); // Explicit background color
+    renderer.setClearColor(initialBackgroundColor, 1.0); // Set background color to match theme
+    console.log('🖥️ Set renderer clear color to:', initialBackgroundColor.toString(16));
     rendererRef.current = renderer;
     
     // Clear any existing canvases first
@@ -994,6 +1029,12 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     items.forEach((item, index) => {
       // console.log(`🔸 Processing item ${index}/${items.length}: ${item.hash} (${item.type}), number: ${item.number}`);
       
+      // Skip uncles in 2x2 demo mode
+      if (mode === '2x2' && item.type === 'uncle') {
+        blocksSkipped++;
+        return;
+      }
+      
       // Check if block already exists in scene
       const existingBlock = scene.children.find(child => 
         child.userData.isBlock && child.userData.item.id === item.id
@@ -1383,6 +1424,11 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
         
     // Add connecting lines between blocks with proper hierarchy
     items.forEach(item => {
+      // Skip uncles in 2x2 demo mode
+      if (mode === '2x2' && item.type === 'uncle') {
+        return;
+      }
+      
       // Handle different types of connections
       let connectionsToMake = [];
       
@@ -1838,10 +1884,12 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
           <div style={{ width: '16px', height: '16px', backgroundColor: '#2196F3', marginRight: '8px', borderRadius: '2px' }}></div>
           <span>Workshare</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ width: '16px', height: '16px', backgroundColor: '#FF9800', marginRight: '8px', borderRadius: '2px' }}></div>
-          <span>Uncle</span>
-        </div>
+        {mode !== '2x2' && (
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ width: '16px', height: '16px', backgroundColor: '#FF9800', marginRight: '8px', borderRadius: '2px' }}></div>
+            <span>Uncle</span>
+          </div>
+        )}
         {mode === '2x2' && (
           <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
             <div style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.7)' }}>
