@@ -16,44 +16,44 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
   // 2x2 hierarchy network configuration
   const networkConfig = {
     prime: {
-      ws: 'wss://demo.rpc.quai.network/prime/ws/',
-      http: 'https://demo.rpc.quai.network/prime/http/',
+      ws: 'wss://demo.rpc.quai.network/prime',
+      http: 'https://demo.rpc.quai.network/prime',
       name: 'Prime'
     },
     regions: [
       {
-        ws: 'wss://demo.rpc.quai.network/region0/ws/',
-        http: 'https://demo.rpc.quai.network/region0/http/',
+        ws: 'wss://demo.rpc.quai.network/cyprus',
+        http: 'https://demo.rpc.quai.network/cyprus',
         name: 'Region-0'
       },
       {
-        ws: 'wss://demo.rpc.quai.network/region1/ws/',
-        http: 'https://demo.rpc.quai.network/region1/http/',
+        ws: 'wss://demo.rpc.quai.network/paxos',
+        http: 'https://demo.rpc.quai.network/paxos',
         name: 'Region-1'
       }
     ],
     zones: [
       {
-        ws: 'wss://demo.rpc.quai.network/zone00/ws/',
-        http: 'https://demo.rpc.quai.network/zone00/http/',
+        ws: 'wss://demo.rpc.quai.network/cyprus1',
+        http: 'https://demo.rpc.quai.network/cyprus1',
         name: 'Zone-0-0',
         region: 0
       },
       {
-        ws: 'wss://demo.rpc.quai.network/zone01/ws/',
-        http: 'https://demo.rpc.quai.network/zone01/http/',
+        ws: 'wss://demo.rpc.quai.network/cyprus2',
+        http: 'https://demo.rpc.quai.network/cyprus2',
         name: 'Zone-0-1',
         region: 0
       },
       {
-        ws: 'wss://demo.rpc.quai.network/zone10/ws/',
-        http: 'https://demo.rpc.quai.network/zone10/http/',
+        ws: 'wss://demo.rpc.quai.network/paxos1',
+        http: 'https://demo.rpc.quai.network/paxos1',
         name: 'Zone-1-0',
         region: 1
       },
       {
-        ws: 'wss://demo.rpc.quai.network/zone11/ws/',
-        http: 'https://demo.rpc.quai.network/zone11/http/',
+        ws: 'wss://demo.rpc.quai.network/paxos2',
+        http: 'https://demo.rpc.quai.network/paxos2',
         name: 'Zone-1-1',
         region: 1
       }
