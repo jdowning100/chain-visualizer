@@ -42,6 +42,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
   const [hoveredBlock, setHoveredBlock] = useState(null);
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: '' });
   const [currentTheme, setCurrentTheme] = useState(mode === 'mainnet' ? 'space' : 'quai');
+  const [userSelectedTheme, setUserSelectedTheme] = useState(false);
   const currentThemeRef = useRef(null);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [volume, setVolume] = useState(0.3);
@@ -316,8 +317,18 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     // Play theme music
     playThemeMusic(themeName);
     
+    console.log('switchTheme: setting currentTheme from', currentTheme, 'to', themeName);
     setCurrentTheme(themeName);
   }, [playThemeMusic]);
+
+  // Debug: Monitor currentTheme changes and call switchTheme when user selects manually
+  useEffect(() => {
+    console.log('currentTheme state changed to:', currentTheme);
+    if (userSelectedTheme) {
+      console.log('User selected theme, calling switchTheme with:', currentTheme);
+      switchTheme(currentTheme);
+    }
+  }, [currentTheme, userSelectedTheme, switchTheme]);
 
   // Update audio volume when volume changes
   useEffect(() => {
@@ -333,14 +344,18 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     }
   }, [currentTheme, playThemeMusic, sceneReady]);
 
-  // Update theme when mode changes
+  // Update theme when mode changes (only if user hasn't manually selected a theme)
   useEffect(() => {
-    const defaultTheme = mode === 'mainnet' ? 'space' : 'quai';
-    if (currentTheme !== defaultTheme) {
-      console.log('🔄 Mode changed, switching to default theme:', defaultTheme);
-      setCurrentTheme(defaultTheme);
+    if (!userSelectedTheme) {
+      const defaultTheme = mode === 'mainnet' ? 'space' : 'quai';
+      if (currentTheme !== defaultTheme) {
+        console.log('🔄 Mode changed, switching to default theme:', defaultTheme, 'userSelectedTheme:', userSelectedTheme);
+        setCurrentTheme(defaultTheme);
+      }
+    } else {
+      console.log('👤 User has manually selected theme, skipping auto-switch. userSelectedTheme:', userSelectedTheme, 'currentTheme:', currentTheme);
     }
-  }, [mode, currentTheme]);
+  }, [mode, userSelectedTheme]); // Remove currentTheme from dependencies to prevent infinite loop
 
   // Initialize theme when scene becomes ready
   useEffect(() => {
@@ -506,25 +521,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
             const newX = child.userData.originalPosition.x - scrollOffsetRef.current;
             child.position.x = newX;
             
-            // Handle workshare color animation
-            if (child.userData.isNewWorkshare && child.userData.animationStartTime) {
-              const elapsed = Date.now() - child.userData.animationStartTime;
-              const duration = 1000; // 1 second fade
-              
-              if (elapsed < duration) {
-                // Interpolate from white (0xffffff) to blue (0x2196F3)
-                const progress = elapsed / duration;
-                const white = new THREE.Color(0xffffff);
-                const blue = new THREE.Color(config.colors.workshare);
-                const currentColor = white.lerp(blue, progress);
-                child.material.color = currentColor;
-              } else {
-                // Animation complete, mark as finished
-                child.userData.isNewWorkshare = false;
-                child.userData.animationStartTime = null;
-                child.material.color = new THREE.Color(config.colors.workshare);
-              }
-            }
+            // Workshare animation is now handled by THREE.js tween system, not in the loop
             
             // Mark blocks that are far off-screen for removal
             if (newX < -10000) { // Off-screen to the left (increased distance)
@@ -532,16 +529,27 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
             }
           }
           if (child.userData.isArrow && child.userData.originalPoints) {
-            // Update arrow positions
+            // Update arrow positions - validate scroll offset first
+            const scrollOffset = isNaN(scrollOffsetRef.current) ? 0 : scrollOffsetRef.current;
             const points = child.userData.originalPoints.map(point => 
-              new THREE.Vector3(point.x - scrollOffsetRef.current, point.y, point.z)
+              new THREE.Vector3(point.x - scrollOffset, point.y, point.z)
             );
             
+            // Validate points to prevent NaN errors
+            const validPoints = points.every(point => 
+              !isNaN(point.x) && !isNaN(point.y) && !isNaN(point.z)
+            );
+            
+            if (validPoints) {
               child.geometry.setFromPoints(points);
               
               // Mark arrows that are far off-screen for removal
               const leftmostX = Math.min(...points.map(p => p.x));
               if (leftmostX < -10000) { // Off-screen to the left (increased distance)
+                toRemove.push(child);
+              }
+            } else {
+              console.warn('Invalid arrow points detected in scroll update, removing arrow:', points);
               toRemove.push(child);
             }
           }
@@ -1008,6 +1016,8 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
       // For workshares, start with white and animate to blue
       if (item.type === 'workshare') {
         color = 0xffffff; // Start white
+        const currentColors = getThemeColors(currentTheme);
+        console.log('Creating workshare: currentTheme =', currentTheme, 'config.colors.workshare =', config.colors.workshare.toString(16), 'getThemeColors.workshare =', currentColors.workshare.toString(16));
       }
       
       // Create glowy material for Tron theme, glass material for Quai, normal material for others
@@ -1063,7 +1073,14 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
       // Position calculation for continuous left-to-right flow
       let posX, posY, posZ;
       
-      if (item.number === null) {
+      // Validate timestamp to prevent NaN errors
+      if (!item.timestamp || isNaN(item.timestamp) || !minTimestamp || isNaN(minTimestamp)) {
+        console.warn('Invalid timestamp detected for item:', item.id, 'timestamp:', item.timestamp, 'minTimestamp:', minTimestamp);
+        // Use fallback positioning
+        posX = -200 - Math.random() * 100;
+        posY = typeBaseY[item.type] || 0;
+        posZ = 0;
+      } else if (item.number === null) {
         if (item.type === 'workshare' && item.fullParentHash) {
           // For workshares with null numbers, position them based on their timestamp
           const parentBlock = items.find(p => p.fullHash === item.fullParentHash && p.type === 'block');
@@ -1205,19 +1222,61 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
         }
       }
       
+      // Validate final positions to prevent NaN errors
+      if (isNaN(posX) || isNaN(posY) || isNaN(posZ)) {
+        console.warn('Invalid position calculated for item:', item.id, 'posX:', posX, 'posY:', posY, 'posZ:', posZ);
+        // Use fallback position
+        posX = -200;
+        posY = typeBaseY[item.type] || 0;
+        posZ = 0;
+      }
+      
       // Store original position and set current position with scroll offset
       const originalPosition = { x: posX, y: posY, z: posZ };
-      const currentX = posX - scrollOffsetRef.current;
+      const scrollOffset = isNaN(scrollOffsetRef.current) ? 0 : scrollOffsetRef.current;
+      const currentX = posX - scrollOffset;
       
-      cube.position.set(currentX, posY, posZ);
+      // Validate final cube position
+      if (isNaN(currentX)) {
+        console.warn('Invalid currentX calculated for item:', item.id, 'posX:', posX, 'scrollOffset:', scrollOffset);
+        cube.position.set(-200, posY, posZ);
+      } else {
+        cube.position.set(currentX, posY, posZ);
+      }
       cube.userData = {
         isBlock: true,
         item: item,
         originalSize: size,
-        originalPosition: originalPosition,
-        isNewWorkshare: item.type === 'workshare',
-        animationStartTime: item.type === 'workshare' ? Date.now() : null
+        originalPosition: originalPosition
       };
+      
+      // Animate workshare color from white to theme color using CSS-style animation
+      if (item.type === 'workshare') {
+        const currentColors = getThemeColors(currentTheme);
+        const targetColor = new THREE.Color(currentColors.workshare);
+        
+        // Start with white
+        cube.material.color.setHex(0xffffff);
+        
+        // Animate to target color over 1 second
+        const startTime = Date.now();
+        const duration = 1000;
+        
+        const animateColor = () => {
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          
+          const white = new THREE.Color(0xffffff);
+          const currentColor = white.lerp(targetColor, progress);
+          cube.material.color.copy(currentColor);
+          
+          if (progress < 1) {
+            requestAnimationFrame(animateColor);
+          }
+        };
+        
+        requestAnimationFrame(animateColor);
+      }
       
       // Reposition chain when zone blocks are created (like recenter but no camera move)
       if (item.type === 'block') { // zone blocks
@@ -1235,8 +1294,12 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
           // Adjust scroll offset to keep newest blocks (rightmost) in view
           // Position newest blocks around x=0 to x=400 in screen space
           const targetScrollOffset = maxOriginalX - 200;
-          scrollOffsetRef.current = targetScrollOffset;
-          targetScrollOffsetRef.current = targetScrollOffset;
+          if (!isNaN(targetScrollOffset)) {
+            scrollOffsetRef.current = targetScrollOffset;
+            targetScrollOffsetRef.current = targetScrollOffset;
+          } else {
+            console.warn('Invalid targetScrollOffset calculated:', targetScrollOffset, 'maxOriginalX:', maxOriginalX);
+          }
         }
       }
       
@@ -1441,6 +1504,19 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
               new THREE.Vector3(point.x, point.y, point.z)
             );
             
+            // Validate both current and original points to prevent NaN errors
+            const validCurrentPoints = currentPoints.every(point => 
+              !isNaN(point.x) && !isNaN(point.y) && !isNaN(point.z)
+            );
+            const validOriginalPoints = originalPoints.every(point => 
+              !isNaN(point.x) && !isNaN(point.y) && !isNaN(point.z)
+            );
+            
+            if (!validCurrentPoints || !validOriginalPoints) {
+              console.warn('Invalid arrow points detected, skipping arrow. Current:', currentPoints, 'Original:', originalPoints);
+              return; // Skip this arrow
+            }
+            
             const geometry = new THREE.BufferGeometry().setFromPoints(currentPoints);
             // Use white color for inclusion arrows (same as regular arrows)
             const lineColor = config.colors.arrow; // Theme-specific arrow color
@@ -1584,7 +1660,12 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
           </label>
           <select
             value={currentTheme}
-            onChange={(e) => switchTheme(e.target.value)}
+            onChange={(e) => {
+              console.log('Dropdown onChange triggered with value:', e.target.value);
+              setUserSelectedTheme(true);
+              console.log('Setting currentTheme directly to:', e.target.value);
+              setCurrentTheme(e.target.value);
+            }}
             style={{
               background: 'transparent',
               color: '#ffffff',
