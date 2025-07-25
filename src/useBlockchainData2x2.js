@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 const MaxBlocksToFetch = 10;
-const MaxItemsToKeep = 300; // Reduced for better 3D rendering performance
+const MaxItemsToKeep = 500; // Reduced for better 3D rendering performance
 
 export const useBlockchainData2x2 = (isEnabled = false) => {
   const [items, setItems] = useState([]);
@@ -62,22 +62,30 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
   };
   
 
-  // Cleanup function to keep only the most recent items
+  // Cleanup function to keep only the most visible items (closest to camera)
   const cleanupOldItems = useCallback((itemsList) => {
     if (itemsList.length <= MaxItemsToKeep) {
       return itemsList;
     }
     
-    // Sort by number (block height) and timestamp, keep only the most recent
+    // Sort by render relevance: timestamp (older items are further back in render)
+    // Items with higher timestamps are more recent and closer to camera (lower X position)
     const sortedItems = itemsList.sort((a, b) => {
-      // First sort by block number (higher numbers are newer)
-      const numDiff = (b.number || 0) - (a.number || 0);
-      if (numDiff !== 0) return numDiff;
-      // Then sort by timestamp (more recent first)
-      return (b.timestamp || 0) - (a.timestamp || 0);
+      // Primary sort: by timestamp (newer items first - they're closer to camera)
+      const timestampDiff = (b.timestamp || 0) - (a.timestamp || 0);
+      if (timestampDiff !== 0) return timestampDiff;
+      
+      // Secondary sort: by block number (higher block numbers first)
+      return (b.number || 0) - (a.number || 0);
     });
     
     const keptItems = sortedItems.slice(0, MaxItemsToKeep);
+    
+    // Log cleanup for debugging
+    if (itemsList.length > MaxItemsToKeep) {
+      const removedCount = itemsList.length - MaxItemsToKeep;
+      console.log(`🧹 2x2 cleanup: removed ${removedCount} items (oldest in render), kept ${keptItems.length}`);
+    }
       
     return keptItems;
   }, []);
@@ -357,9 +365,23 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
     }
   }, [addItem]);
 
-  // Keep isEnabledRef current
+  // Keep isEnabledRef current and clear data when disabled
   useEffect(() => {
+    const wasEnabled = isEnabledRef.current;
     isEnabledRef.current = isEnabled;
+    
+    // Clear data when switching from enabled to disabled
+    if (wasEnabled && !isEnabled) {
+      console.log('🧹 2x2 mode disabled, clearing all data');
+      setItems([]);
+      setTipBlockHeight(0);
+      maxHeightRef.current = 0;
+      fetchingParentsRef.current.clear();
+      missingParentsRef.current.clear();
+      setIsConnected(false);
+      setConnectionStatus('Disconnected');
+      setWsConnections({});
+    }
   }, [isEnabled]);
 
   // WebSocket connection management for all chains

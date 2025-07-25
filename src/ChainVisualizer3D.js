@@ -1264,8 +1264,9 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
           posY = baseY; // Each type stays at its designated Y level
         }
         
-        // Z-axis: For workshares, use depth instead of height stacking
+        // Z-axis positioning
         if (item.type === 'workshare') {
+          // For workshares, always use depth stacking even in 2x2 mode
           if (item.fullParentHash) {
             // Use timestamp to determine stable Z position
             // This ensures workshares maintain their position even when new ones are added
@@ -1276,11 +1277,26 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
             // Sort by timestamp to get stable ordering
             const sortedWorkshares = worksharesForParent.sort((a, b) => a.timestamp - b.timestamp);
             const workshareIndex = sortedWorkshares.findIndex(i => i.id === item.id);
-            posZ = (workshareIndex - Math.floor(sortedWorkshares.length / 2)) * 80; // Spread wider in Z
+            posZ = (workshareIndex - Math.floor(sortedWorkshares.length / 2)) * 120; // Increased spread for better visibility
           } else {
             // For workshares without parent, use hash to generate consistent Z position
             const hashCode = item.hash.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-            posZ = ((hashCode % 5) - 2) * 80; // Consistent position based on hash
+            posZ = ((hashCode % 7) - 3) * 120; // Increased range and spread
+          }
+          
+          // In 2x2 mode, add chain-based offset to the workshare Z position
+          if (mode === '2x2' && item.chainName) {
+            const getChainZOffset = (chainName) => {
+              if (chainName === 'Prime') return 0; // Prime at center
+              if (chainName === 'Region-0') return -300; // Region 0 to the left
+              if (chainName === 'Region-1') return 300;  // Region 1 to the right
+              if (chainName === 'Zone-0-0') return -450; // Zone 0-0 far left
+              if (chainName === 'Zone-0-1') return -150; // Zone 0-1 left center
+              if (chainName === 'Zone-1-0') return 150;  // Zone 1-0 right center
+              if (chainName === 'Zone-1-1') return 450;  // Zone 1-1 far right
+              return 0; // Fallback
+            };
+            posZ += getChainZOffset(item.chainName); // Add chain offset to workshare depth
           }
         } else if (mode === '2x2' && item.chainName) {
           // For 2x2 mode, spread chains across Z-axis based on chain name
