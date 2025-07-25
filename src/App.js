@@ -12,9 +12,12 @@ function App() {
   const [current3DMode, setCurrent3DMode] = useState('mainnet'); // 'mainnet' or '2x2'
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
-  // Centralized blockchain data management - only load data after user interaction
-  const blockchainData = useBlockchainData(hasUserInteracted);
-  const blockchainData2x2 = useBlockchainData2x2(currentView === '3d' && current3DMode === '2x2' && hasUserInteracted);
+  // Centralized blockchain data management - only load data for active mode after user interaction
+  const shouldLoadMainnet = hasUserInteracted && (currentView === 'normal' || (currentView === '3d' && current3DMode === 'mainnet'));
+  const shouldLoad2x2 = hasUserInteracted && currentView === '3d' && current3DMode === '2x2';
+  
+  const blockchainData = useBlockchainData(shouldLoadMainnet);
+  const blockchainData2x2 = useBlockchainData2x2(shouldLoad2x2);
 
   const handleViewChange = (view) => {
     setCurrentView(view);

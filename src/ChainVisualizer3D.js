@@ -7,6 +7,20 @@ import './ChainVisualizer.css';
 const MaxBlocksToFetch = 10;
 
 const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserInteracted = false }) => {  
+  // Shared geometry cache
+  const geometryCache = useRef(new Map());
+  const materialCache = useRef(new Map());
+  
+  // Object pool for Vector3 instances
+  const vector3Pool = useRef([]);
+  const getPooledVector3 = useCallback(() => {
+    return vector3Pool.current.pop() || new THREE.Vector3();
+  }, []);
+  const returnPooledVector3 = useCallback((vec) => {
+    vec.set(0, 0, 0);
+    vector3Pool.current.push(vec);
+  }, []);
+  
   // Extract data from props
   const {
     items,
@@ -1698,7 +1712,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
         console.log(`📷 Initial camera positioned at (${cameraX}, ${cameraY}, ${cameraZ}) looking at center (0, 0, 0)`);
       }
     }
-    }, 100); // 100ms debounce
+    }, 50); // 50ms debounce for better responsiveness
     
     // Cleanup function
     return () => {

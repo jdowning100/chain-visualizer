@@ -12,6 +12,7 @@ export const useBlockchainData = (isEnabled = true) => {
   const maxHeightRef = useRef(0);
   const fetchingParentsRef = useRef(new Set());
   const missingParentsRef = useRef(new Map());
+  const isEnabledRef = useRef(isEnabled);
 
   // Cleanup function to keep only the most recent items
   const cleanupOldItems = useCallback((itemsList) => {
@@ -328,6 +329,11 @@ export const useBlockchainData = (isEnabled = true) => {
     }
   }, [isConnected, addItem]);
 
+  // Keep isEnabledRef current
+  useEffect(() => {
+    isEnabledRef.current = isEnabled;
+  }, [isEnabled]);
+
   // WebSocket connection management
   useEffect(() => {
     if (!isEnabled) {
@@ -379,7 +385,14 @@ export const useBlockchainData = (isEnabled = true) => {
           setIsConnected(false);
           setConnectionStatus('Disconnected');
           setWsConnection(null);
-          setTimeout(connectWebSocket, 5000);
+          // Only reconnect if still enabled
+          if (isEnabledRef.current) {
+            setTimeout(() => {
+              if (isEnabledRef.current) { // Double-check isEnabled is still true
+                connectWebSocket();
+              }
+            }, 5000);
+          }
         };
 
         ws.onerror = (error) => {
@@ -390,7 +403,14 @@ export const useBlockchainData = (isEnabled = true) => {
       } catch (error) {
         console.error('Failed to connect to WebSocket:', error);
         setConnectionStatus('Error');
-        setTimeout(connectWebSocket, 5000);
+        // Only retry if still enabled
+        if (isEnabledRef.current) {
+          setTimeout(() => {
+            if (isEnabledRef.current) { // Double-check isEnabled is still true
+              connectWebSocket();
+            }
+          }, 5000);
+        }
       }
     };
 

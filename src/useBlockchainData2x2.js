@@ -12,6 +12,7 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
   const maxHeightRef = useRef(0);
   const fetchingParentsRef = useRef(new Set());
   const missingParentsRef = useRef(new Map());
+  const isEnabledRef = useRef(isEnabled);
 
   // 2x2 hierarchy network configuration
   const networkConfig = {
@@ -356,6 +357,11 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
     }
   }, [addItem]);
 
+  // Keep isEnabledRef current
+  useEffect(() => {
+    isEnabledRef.current = isEnabled;
+  }, [isEnabled]);
+
   // WebSocket connection management for all chains
   useEffect(() => {
     if (!isEnabled) {
@@ -428,8 +434,14 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
             setWsConnections({});
           }
           
-          // Reconnect after delay
-          setTimeout(() => connectWebSocket(config, chainName), 5000);
+          // Only reconnect if still enabled and not intentionally disconnected
+          if (isEnabledRef.current) {
+            setTimeout(() => {
+              if (isEnabledRef.current) { // Double-check isEnabled is still true
+                connectWebSocket(config, chainName);
+              }
+            }, 5000);
+          }
         };
 
         ws.onerror = (error) => {
@@ -440,7 +452,14 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
       } catch (error) {
         console.error(`Failed to connect to WebSocket ${chainName}:`, error);
         setConnectionStatus('Error');
-        setTimeout(() => connectWebSocket(config, chainName), 5000);
+        // Only retry if still enabled
+        if (isEnabledRef.current) {
+          setTimeout(() => {
+            if (isEnabledRef.current) { // Double-check isEnabled is still true
+              connectWebSocket(config, chainName);
+            }
+          }, 5000);
+        }
       }
     };
 
