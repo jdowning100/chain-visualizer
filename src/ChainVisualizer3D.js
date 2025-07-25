@@ -223,23 +223,10 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
           const item = child.userData.item;
           let newColor = newColors[item.type] || newColors.block;
 
-          // For workshares, maintain the animation logic
+          // For workshares, use theme color directly (no white loading animation)
           if (item.type === 'workshare') {
-            if (child.userData.isNewWorkshare && child.userData.animationStartTime) {
-              const elapsed = Date.now() - child.userData.animationStartTime;
-              const animationDuration = 2000; // 2 seconds
-              if (elapsed < animationDuration) {
-                const progress = elapsed / animationDuration;
-                // Interpolate from white to theme color
-                const white = new THREE.Color(0xffffff);
-                const targetColor = new THREE.Color(newColor);
-                const currentColor = white.lerp(targetColor, progress);
-                newColor = currentColor.getHex();
-              } else {
-                child.userData.isNewWorkshare = false;
-                child.userData.animationStartTime = null;
-              }
-            }
+            // Simply use the theme color without animation
+            newColor = newColors.workshare;
           }
           
           // Update the material color and glow properties
@@ -373,7 +360,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
     } else {
       console.log('👤 User has manually selected theme, skipping auto-switch. userSelectedTheme:', userSelectedTheme, 'currentTheme:', currentTheme);
     }
-  }, [mode, userSelectedTheme]); // Remove currentTheme from dependencies to prevent infinite loop
+  }, [mode]); // Only depend on mode changes
 
   // Sync user interaction state from parent
   useEffect(() => {
@@ -850,14 +837,24 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
       
       // Clear remaining refs
       cameraRef.current = null;
+      raycasterRef.current = null;
       scrollOffsetRef.current = 0;
       targetScrollOffsetRef.current = 0;
       absoluteMinTimestampRef.current = null;
+      zoomRef.current = null;
+      prevMinHeightRef.current = null;
+      prevMaxHeightRef.current = 0;
       
       // Cancel any pending animation frame
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
+      }
+      
+      // Clear any pending render timeout
+      if (renderTimeoutRef.current) {
+        clearTimeout(renderTimeoutRef.current);
+        renderTimeoutRef.current = null;
       }
     };
   }, []);
@@ -1062,11 +1059,10 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
       // Create solid glass-like material with appropriate color
       let color = config.colors[item.type] || config.colors.block;
       
-      // For workshares, start with white and animate to blue
+      // For workshares, use theme color directly (no white loading)
       if (item.type === 'workshare') {
-        color = 0xffffff; // Start white
         const currentColors = getThemeColors(currentTheme);
-        console.log('Creating workshare: currentTheme =', currentTheme, 'config.colors.workshare =', config.colors.workshare.toString(16), 'getThemeColors.workshare =', currentColors.workshare.toString(16));
+        color = currentColors.workshare;
       }
       
       // Create glowy material for Tron theme, glass material for Quai, normal material for others
@@ -1299,32 +1295,10 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
         originalPosition: originalPosition
       };
       
-      // Animate workshare color from white to theme color using CSS-style animation
+      // Set workshare color directly to theme color (no white loading animation)
       if (item.type === 'workshare') {
         const currentColors = getThemeColors(currentTheme);
-        const targetColor = new THREE.Color(currentColors.workshare);
-        
-        // Start with white
-        cube.material.color.setHex(0xffffff);
-        
-        // Animate to target color over 1 second
-        const startTime = Date.now();
-        const duration = 1000;
-        
-        const animateColor = () => {
-          const elapsed = Date.now() - startTime;
-          const progress = Math.min(elapsed / duration, 1);
-          
-          const white = new THREE.Color(0xffffff);
-          const currentColor = white.lerp(targetColor, progress);
-          cube.material.color.copy(currentColor);
-          
-          if (progress < 1) {
-            requestAnimationFrame(animateColor);
-          }
-        };
-        
-        requestAnimationFrame(animateColor);
+        cube.material.color.setHex(currentColors.workshare);
       }
       
       // Reposition chain when zone blocks are created (like recenter but no camera move)

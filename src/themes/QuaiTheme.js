@@ -3,7 +3,6 @@ import * as THREE from 'three';
 export default class QuaiTheme {
   constructor(scene) {
     this.scene = scene;
-    this.animatedBlocks = new Map();
     this.textureLoader = new THREE.TextureLoader();
     this.clock = new THREE.Clock();
     this.terrain = null;
@@ -203,129 +202,42 @@ export default class QuaiTheme {
   }
   
   animateBlock(block, chainType) {
-    const startTime = Date.now();
+    // Set final colors directly without animation
+    let color, emissive;
+    switch(chainType) {
+      case 'prime':
+        color = 0xff1100;
+        emissive = 0xcc0000;
+        break;
+      case 'region':
+        color = 0xff4422;
+        emissive = 0xdd2200;
+        break;
+      case 'zone':
+        color = 0xff6644;
+        emissive = 0xee3311;
+        break;
+      case 'workshare':
+        color = 0xffaa88;
+        emissive = 0xff7755;
+        break;
+      default:
+        color = 0xff3333;
+        emissive = 0xdd1111;
+    }
     
-    // Set initial bright white-orange color
-    block.material.color.setHex(0xffeeaa);
-    block.material.emissive.setHex(0xffcc88);
-    block.material.emissiveIntensity = 0.6;
-    block.material.opacity = 0.9;
+    // Apply final material properties directly
+    block.material.color.setHex(color);
+    block.material.emissive.setHex(emissive);
+    block.material.emissiveIntensity = 0.3;
+    block.material.opacity = 0.8;
     block.material.transparent = true;
-    
-    // Store animation data with optimized structure
-    this.animatedBlocks.set(block, {
-      startTime,
-      chainType,
-      lastUpdateFrame: 0,
-      redPhaseStarted: false
-    });
-    
-    // Add simplified glow effect
-    const glowGeometry = new THREE.BoxGeometry(
-      block.geometry.parameters.width * 1.1,
-      block.geometry.parameters.height * 1.1,
-      block.geometry.parameters.depth * 1.1
-    );
-    const glowMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffcc88,
-      transparent: true,
-      opacity: 0.6,
-      side: THREE.BackSide
-    });
-    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-    block.add(glow);
-    block.userData.glow = glow;
   }
   
   
   update() {
-    const currentTime = Date.now();
-    const blocksToRemove = [];
-    
-    for (const [block, data] of this.animatedBlocks) {
-      const elapsed = (currentTime - data.startTime) / 1000;
-      const progress = Math.min(elapsed / 2, 1); // Reduced to 2 seconds from 3
-      
-      // Use pre-calculated colors for better performance
-      if (!data.finalColor) {
-        switch(data.chainType) {
-          case 'prime':
-            data.finalColor = new THREE.Color(0xff1100);
-            data.finalEmissive = new THREE.Color(0xcc0000);
-            break;
-          case 'region':
-            data.finalColor = new THREE.Color(0xff4422);
-            data.finalEmissive = new THREE.Color(0xdd2200);
-            break;
-          case 'zone':
-            data.finalColor = new THREE.Color(0xff6644);
-            data.finalEmissive = new THREE.Color(0xee3311);
-            break;
-          case 'workshare':
-            data.finalColor = new THREE.Color(0xffaa88);
-            data.finalEmissive = new THREE.Color(0xff7755);
-            break;
-          default:
-            data.finalColor = new THREE.Color(0xff3333);
-            data.finalEmissive = new THREE.Color(0xdd1111);
-        }
-      }
-      
-      // Simplified 2-stage animation with fewer updates
-      if (progress < 0.6) {
-        // Orange phase - only update every 3rd frame for performance
-        if (!data.lastUpdateFrame || currentTime - data.lastUpdateFrame > 50) { // ~20 FPS updates instead of 60
-          const stageProgress = progress / 0.6;
-          const startColor = new THREE.Color(0xffeeaa);
-          const midColor = new THREE.Color(0xff8833);
-          
-          block.material.color.lerpColors(startColor, midColor, stageProgress);
-          block.material.emissive.setHex(0xff6622);
-          block.material.emissiveIntensity = 0.6 + (stageProgress * 0.4);
-          
-          data.lastUpdateFrame = currentTime;
-        }
-      } else if (progress < 1) {
-        // Red phase - fewer updates
-        if (!data.redPhaseStarted) {
-          data.redPhaseStarted = true;
-          // Remove texture early to avoid constant recreation
-          block.material.map = null;
-          block.material.needsUpdate = true;
-        }
-        
-        if (!data.lastUpdateFrame || currentTime - data.lastUpdateFrame > 50) {
-          const stageProgress = (progress - 0.6) / 0.4;
-          const midColor = new THREE.Color(0xff8833);
-          
-          block.material.color.lerpColors(midColor, data.finalColor, stageProgress);
-          block.material.emissive.lerpColors(new THREE.Color(0xff6622), data.finalEmissive, stageProgress);
-          block.material.emissiveIntensity = 1.0 - (stageProgress * 0.7);
-          
-          // Update glow less frequently
-          if (block.userData.glow) {
-            block.userData.glow.material.opacity = 0.6 * (1 - progress);
-            block.userData.glow.scale.setScalar(1 + 0.15 * (1 - progress));
-          }
-          
-          data.lastUpdateFrame = currentTime;
-        }
-      } else {
-        // Animation complete
-        blocksToRemove.push(block);
-      }
-    }
-    
-    // Clean up completed animations in batch
-    blocksToRemove.forEach(block => {
-      if (block.userData.glow) {
-        block.remove(block.userData.glow);
-        block.userData.glow = null;
-      }
-      block.material.map = null;
-      block.material.needsUpdate = true;
-      this.animatedBlocks.delete(block);
-    });
+    // No block loading animations - this method now does nothing for block animations
+    // Any other theme updates (like starships, dust, etc.) can remain in updateAnimations()
   }
   
   getConnectionMaterial() {
@@ -1066,23 +978,6 @@ export default class QuaiTheme {
   
   cleanup() {
     // Clean up any theme-specific resources
-    // Remove glow effects from all animated blocks
-    for (const [block, data] of this.animatedBlocks) {
-      if (block.userData.glow) {
-        block.remove(block.userData.glow);
-        if (block.userData.glow.geometry) block.userData.glow.geometry.dispose();
-        if (block.userData.glow.material) block.userData.glow.material.dispose();
-        block.userData.glow = null;
-      }
-      
-      // Remove textures
-      if (block.material && block.material.map) {
-        block.material.map = null;
-        block.material.needsUpdate = true;
-      }
-    }
-    
-    this.animatedBlocks.clear();
     
     // Clean up Mars terrain
     if (this.terrain) {
