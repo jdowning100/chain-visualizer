@@ -362,6 +362,14 @@
   }
   
   .nav-3d-mode-selector {
-    display: none; /* Hide 3D mode selector on very small screens */
+    /* Make it visible but more compact on small screens */
+    padding: 2px;
+    gap: 1px;
+  }
+  
+  .mode-button {
+    padding: 4px 8px;
+    min-width: 24px;
+    font-size: 11px;
   }
 }

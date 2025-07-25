@@ -46,6 +46,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [volume, setVolume] = useState(0.3);
   const audioRef = useRef(null);
+  const [userInteracted, setUserInteracted] = useState(false);
 
   // Get theme-specific block colors
   const getThemeColors = useCallback((themeName) => {
@@ -202,7 +203,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
         if (child.userData.isBlock && child.userData.item) {
           const item = child.userData.item;
           let newColor = newColors[item.type] || newColors.block;
-          
+
           // For workshares, maintain the animation logic
           if (item.type === 'workshare') {
             if (child.userData.isNewWorkshare && child.userData.animationStartTime) {
@@ -535,12 +536,12 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
             const points = child.userData.originalPoints.map(point => 
               new THREE.Vector3(point.x - scrollOffsetRef.current, point.y, point.z)
             );
-
-              child.geometry.setFromPoints(points);
             
-            // Mark arrows that are far off-screen for removal
-            const leftmostX = Math.min(...points.map(p => p.x));
-            if (leftmostX < -10000) { // Off-screen to the left (increased distance)
+              child.geometry.setFromPoints(points);
+              
+              // Mark arrows that are far off-screen for removal
+              const leftmostX = Math.min(...points.map(p => p.x));
+              if (leftmostX < -10000) { // Off-screen to the left (increased distance)
               toRemove.push(child);
             }
           }
@@ -629,6 +630,17 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
       }
     };
     window.addEventListener('keydown', handleKeyPress);
+    
+    // Track user interaction for audio
+    const handleUserInteraction = () => {
+      setUserInteracted(true);
+      // Try to play music if a theme is active
+      if (currentTheme !== 'normal' && !audioRef.current && themeMusic[currentTheme]) {
+        playThemeMusic(currentTheme);
+      }
+    };
+    window.addEventListener('click', handleUserInteraction);
+    window.addEventListener('keydown', handleUserInteraction);
     
     // Mouse event handlers for hover and click
     const handleMouseMove = (event) => {
@@ -725,6 +737,8 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
       // Remove event listeners
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('keydown', handleKeyPress);
+      window.removeEventListener('click', handleUserInteraction);
+      window.removeEventListener('keydown', handleUserInteraction);
       if (mountRef.current) {
         mountRef.current.removeEventListener('mousemove', handleMouseMove);
         mountRef.current.removeEventListener('click', handleMouseClick);
@@ -1771,6 +1785,43 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
           {tooltip.content}
         </div>
       )}
+      
+      {/* Floating mute button inside the visualizer */}
+      <button
+        onClick={() => {
+          setAudioEnabled(!audioEnabled);
+          if (!audioEnabled && userInteracted) {
+            playThemeMusic(currentTheme);
+          } else {
+            stopThemeMusic();
+          }
+        }}
+        className="mute-button-3d"
+        style={{
+          position: 'fixed',
+          bottom: '30px',
+          right: '30px',
+          background: audioEnabled ? 'rgba(204, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.8)',
+          color: '#ffffff',
+          border: '2px solid rgba(204, 0, 0, 0.6)',
+          borderRadius: '50%',
+          width: '56px',
+          height: '56px',
+          fontSize: '24px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+          zIndex: 9999,
+          padding: '0',
+          outline: 'none',
+          transition: 'all 0.3s ease'
+        }}
+        title={audioEnabled ? 'Mute' : 'Unmute'}
+      >
+        {audioEnabled ? '🔊' : '🔇'}
+      </button>
     </div>
   );
 });
