@@ -138,7 +138,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
         console.log('Error loading theme music:', error);
       }
     }
-  }, [volume, themeMusic, audioEnabled]);
+  }, [volume, themeMusic]);
 
   const stopThemeMusic = useCallback(() => {
     if (audioRef.current) {
@@ -211,7 +211,24 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
     
     // Create new theme instance
     if (themeName !== 'normal' && sceneRef.current) {
-      currentThemeRef.current = createTheme(themeName, sceneRef.current);
+      try {
+        currentThemeRef.current = createTheme(themeName, sceneRef.current);
+        if (!currentThemeRef.current) {
+          console.warn(`Failed to create theme: ${themeName}`);
+        } else {
+          console.log(`✅ Successfully created theme: ${themeName}`, currentThemeRef.current);
+          // Verify the theme has required methods
+          if (themeName === 'quai') {
+            console.log('QuaiTheme methods:', {
+              hasGetBlockMaterial: typeof currentThemeRef.current.getBlockMaterial === 'function',
+              hasGetWorkShareMaterial: typeof currentThemeRef.current.getWorkShareMaterial === 'function'
+            });
+          }
+        }
+      } catch (error) {
+        console.error(`Error creating theme ${themeName}:`, error);
+        currentThemeRef.current = null;
+      }
     }
     
     // Update existing block colors for the new theme
@@ -249,7 +266,9 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
                                item.type === 'regionBlock' ? 'region' : 
                                item.type === 'block' ? 'zone' : 
                                item.type === 'workshare' ? 'workshare' : item.type;
-              const quaiMaterial = currentThemeRef.current?.getBlockMaterial(chainType, item.type === 'uncle');
+              const quaiMaterial = (currentThemeRef.current && typeof currentThemeRef.current.getBlockMaterial === 'function') 
+                ? currentThemeRef.current.getBlockMaterial(chainType, item.type === 'uncle') 
+                : null;
               if (quaiMaterial) {
                 // Copy properties from QuaiTheme material
                 child.material.emissive = quaiMaterial.emissive.clone();
@@ -319,21 +338,18 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
       });
     }
     
-    // Play theme music
-    playThemeMusic(themeName);
-    
     console.log('switchTheme: setting currentTheme from', currentTheme, 'to', themeName);
     setCurrentTheme(themeName);
-  }, [playThemeMusic]);
+  }, []);
 
-  // Debug: Monitor currentTheme changes and call switchTheme when user selects manually
+  // Monitor currentTheme changes and call switchTheme when theme changes
   useEffect(() => {
     console.log('currentTheme state changed to:', currentTheme);
-    if (userSelectedTheme) {
-      console.log('User selected theme, calling switchTheme with:', currentTheme);
+    if (sceneReady) {
+      console.log('Theme changed, calling switchTheme with:', currentTheme);
       switchTheme(currentTheme);
     }
-  }, [currentTheme, userSelectedTheme, switchTheme]);
+  }, [currentTheme]); // Only depend on currentTheme changes
 
   // Update audio volume when volume changes
   useEffect(() => {
@@ -342,25 +358,31 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
     }
   }, [volume]);
 
-  // Handle theme music changes (only when scene is ready and user has interacted)
+  // Handle theme music changes (only when scene is ready, user has interacted, and audio is enabled)
   useEffect(() => {
-    if (sceneReady && userInteracted) {
+    if (sceneReady && userInteracted && audioEnabled) {
       playThemeMusic(currentTheme);
+    } else if (!audioEnabled) {
+      // Stop music when audio is disabled
+      stopThemeMusic();
     }
-  }, [currentTheme, playThemeMusic, sceneReady, userInteracted]);
+  }, [currentTheme, playThemeMusic, sceneReady, userInteracted, audioEnabled, stopThemeMusic]);
 
   // Update theme when mode changes (only if user hasn't manually selected a theme)
   useEffect(() => {
+    console.log('🔄 Mode changed to:', mode);
+    
+    // Only auto-switch themes if user hasn't manually selected one
     if (!userSelectedTheme) {
       const defaultTheme = mode === 'mainnet' ? 'space' : 'quai';
       if (currentTheme !== defaultTheme) {
-        console.log('🔄 Mode changed, switching to default theme:', defaultTheme, 'userSelectedTheme:', userSelectedTheme);
+        console.log('🔄 Mode changed, switching to default theme:', defaultTheme);
         setCurrentTheme(defaultTheme);
       }
     } else {
-      console.log('👤 User has manually selected theme, skipping auto-switch. userSelectedTheme:', userSelectedTheme, 'currentTheme:', currentTheme);
+      console.log('👤 User has manually selected theme, keeping current theme:', currentTheme);
     }
-  }, [mode]); // Only depend on mode changes
+  }, [mode, currentTheme, userSelectedTheme]);
 
   // Sync user interaction state from parent
   useEffect(() => {
@@ -369,13 +391,13 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
     }
   }, [hasUserInteracted, userInteracted]);
 
-  // Initialize theme when scene becomes ready and user has interacted
+  // Initialize theme when scene becomes ready
   useEffect(() => {
-    if (sceneReady && userInteracted) {
-      console.log('🎨 Initializing theme on scene ready:', currentTheme);
+    if (sceneReady && currentTheme !== 'normal') {
+      console.log('🎨 Scene ready, initializing theme:', currentTheme);
       switchTheme(currentTheme);
     }
-  }, [sceneReady, userInteracted, currentTheme, switchTheme]);
+  }, [sceneReady]); // Only trigger when scene becomes ready
 
 
   // Three.js 3D Initialization
@@ -1080,14 +1102,33 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
           opacity: 1.0
         });
       } else if (currentTheme === 'quai' && currentThemeRef.current) {
-        // Use QuaiTheme material for new blocks
+        // Use QuaiTheme material for new blocks - with better error handling
         const chainType = item.type === 'primeBlock' ? 'prime' : 
                          item.type === 'regionBlock' ? 'region' : 
                          item.type === 'block' ? 'zone' : item.type;
-        if (item.type === 'workshare') {
-          material = currentThemeRef.current.getWorkShareMaterial();
-        } else {
-          material = currentThemeRef.current.getBlockMaterial(chainType, item.type === 'uncle');
+        
+        // Create fallback material
+        const fallbackMaterial = new THREE.MeshPhysicalMaterial({ 
+          color: color,
+          roughness: 0.1,
+          metalness: 0.0,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.1
+        });
+        
+        try {
+          if (item.type === 'workshare') {
+            material = (currentThemeRef.current && typeof currentThemeRef.current.getWorkShareMaterial === 'function') 
+              ? currentThemeRef.current.getWorkShareMaterial() 
+              : fallbackMaterial;
+          } else {
+            material = (currentThemeRef.current && typeof currentThemeRef.current.getBlockMaterial === 'function') 
+              ? currentThemeRef.current.getBlockMaterial(chainType, item.type === 'uncle') 
+              : fallbackMaterial;
+          }
+        } catch (error) {
+          console.warn('Error getting theme material, using fallback:', error);
+          material = fallbackMaterial;
         }
       } else {
         material = new THREE.MeshPhysicalMaterial({ 
@@ -1551,10 +1592,15 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
             let line;
             if (currentTheme === 'quai' && currentThemeRef.current) {
               // Use Quai theme connection material with glow
-              const material = currentThemeRef.current.getConnectionMaterial();
+              const material = currentThemeRef.current.getConnectionMaterial?.() || new THREE.LineBasicMaterial({ 
+                color: lineColor,
+                linewidth: 2,
+                depthTest: true,
+                depthWrite: true
+              });
               line = new THREE.Line(geometry, material);
               // Add glow effect
-              const glowLine = currentThemeRef.current.createConnectionGlow(geometry);
+              const glowLine = currentThemeRef.current.createConnectionGlow?.(geometry);
               if (glowLine) {
                 glowLine.userData = { 
                   isArrow: true, 
@@ -1822,8 +1868,8 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
         </div>
       </div>
       
-      {/* Legend - only show for normal theme */}
-      {currentTheme === 'normal' && (
+      {/* Legend - show for normal and space themes */}
+      {(currentTheme === 'normal' || currentTheme === 'space') && (
         <div
           style={{
             position: 'absolute',
@@ -1843,24 +1889,24 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
           {mode === '2x2' ? '2x2 Hierarchy' : 'Legend'}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-          <div style={{ width: '16px', height: '16px', backgroundColor: '#F44336', marginRight: '8px', borderRadius: '2px' }}></div>
+          <div style={{ width: '16px', height: '16px', backgroundColor: `#${getThemeColors(currentTheme).primeBlock.toString(16).padStart(6, '0')}`, marginRight: '8px', borderRadius: '2px' }}></div>
           <span>Prime</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-          <div style={{ width: '16px', height: '16px', backgroundColor: '#FFEB3B', marginRight: '8px', borderRadius: '2px' }}></div>
+          <div style={{ width: '16px', height: '16px', backgroundColor: `#${getThemeColors(currentTheme).regionBlock.toString(16).padStart(6, '0')}`, marginRight: '8px', borderRadius: '2px' }}></div>
           <span>Region {mode === '2x2' ? '(2)' : ''}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-          <div style={{ width: '16px', height: '16px', backgroundColor: '#4CAF50', marginRight: '8px', borderRadius: '2px' }}></div>
+          <div style={{ width: '16px', height: '16px', backgroundColor: `#${getThemeColors(currentTheme).block.toString(16).padStart(6, '0')}`, marginRight: '8px', borderRadius: '2px' }}></div>
           <span>Zone {mode === '2x2' ? '(4)' : ''}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-          <div style={{ width: '16px', height: '16px', backgroundColor: '#2196F3', marginRight: '8px', borderRadius: '2px' }}></div>
+          <div style={{ width: '16px', height: '16px', backgroundColor: `#${getThemeColors(currentTheme).workshare.toString(16).padStart(6, '0')}`, marginRight: '8px', borderRadius: '2px' }}></div>
           <span>Workshare</span>
         </div>
         {mode !== '2x2' && (
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div style={{ width: '16px', height: '16px', backgroundColor: '#FF9800', marginRight: '8px', borderRadius: '2px' }}></div>
+            <div style={{ width: '16px', height: '16px', backgroundColor: `#${getThemeColors(currentTheme).uncle.toString(16).padStart(6, '0')}`, marginRight: '8px', borderRadius: '2px' }}></div>
             <span>Uncle</span>
           </div>
         )}
@@ -1902,11 +1948,7 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
       <button
         onClick={() => {
           setAudioEnabled(!audioEnabled);
-          if (!audioEnabled && userInteracted) {
-            playThemeMusic(currentTheme);
-          } else {
-            stopThemeMusic();
-          }
+          // Let the useEffect handle starting/stopping music based on the new audioEnabled state
         }}
         className="mute-button-3d"
         style={{
