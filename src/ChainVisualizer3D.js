@@ -504,8 +504,16 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
     const animate = () => {
       requestAnimationFrame(animate);
       
-      // Continuous scrolling animation - blocks keep moving
-      scrollOffsetRef.current += config.scrollSpeed;
+      // Smooth scrolling animation - interpolate towards target
+      const targetDiff = targetScrollOffsetRef.current - scrollOffsetRef.current;
+      if (Math.abs(targetDiff) > 5) {
+        // Smooth interpolation when target changes significantly
+        scrollOffsetRef.current += targetDiff * 0.05; // Smooth but responsive transition
+      } else {
+        // Normal continuous scrolling when close to target
+        scrollOffsetRef.current += config.scrollSpeed;
+        targetScrollOffsetRef.current += config.scrollSpeed;
+      }
       
       // Update theme animations
       if (currentThemeRef.current && currentThemeRef.current.updateAnimations) {
@@ -1291,11 +1299,11 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
           const minOriginalX = Math.min(...originalXPositions);
           const maxOriginalX = Math.max(...originalXPositions);
           
-          // Adjust scroll offset to keep newest blocks (rightmost) in view
+          // Smooth scroll adjustment to keep newest blocks in view
           // Position newest blocks around x=0 to x=400 in screen space
           const targetScrollOffset = maxOriginalX - 200;
           if (!isNaN(targetScrollOffset)) {
-            scrollOffsetRef.current = targetScrollOffset;
+            // Only update target, let animation loop smooth transition
             targetScrollOffsetRef.current = targetScrollOffset;
           } else {
             console.warn('Invalid targetScrollOffset calculated:', targetScrollOffset, 'maxOriginalX:', maxOriginalX);
@@ -1717,9 +1725,10 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet' }) => {
                 // Calculate the center of all blocks
                 const centerX = (maxOriginalX + minOriginalX) / 2;
                 
-                // Reset scroll offset to center the blocks
-                scrollOffsetRef.current = maxOriginalX - 400; // Position newest blocks near center
-                targetScrollOffsetRef.current = scrollOffsetRef.current;
+                // Set initial scroll offset to center the blocks
+                const initialScrollOffset = maxOriginalX - 400;
+                scrollOffsetRef.current = initialScrollOffset; // Direct set for initial positioning
+                targetScrollOffsetRef.current = initialScrollOffset;
                 
                 // Position camera to view the centered scene from side angle, less top-down
                 const cameraX = 1000;  // Move camera further left
