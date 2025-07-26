@@ -1036,7 +1036,13 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
         if (item.type === 'primeBlock') baseSize = config.sizes.prime;
         else if (item.type === 'regionBlock') baseSize = config.sizes.region;
         
-        const newSize = baseSize * (1 + 0.2 * currentWorkshareCount);
+        let newSize = baseSize * (1 + 0.2 * currentWorkshareCount);
+        
+        // Apply max size limit for 2x2 demo to prevent blocks from becoming too large
+        if (mode === '2x2') {
+          const maxSize = baseSize * 2.5; // Limit to 2.5x the base size in 2x2 mode
+          newSize = Math.min(newSize, maxSize);
+        }
         const currentSize = blockMesh.userData.originalSize;
         
         if (Math.abs(newSize - currentSize) > 0.1) { // Only update if size changed significantly          
@@ -1095,6 +1101,12 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
       if (['block', 'primeBlock', 'regionBlock'].includes(item.type)) {
         const count = workshareCounts.get(item.fullHash) || 0;
         size = baseSize * (1 + 0.2 * count); // Same scaling as D3
+        
+        // Apply max size limit for 2x2 demo to prevent blocks from becoming too large
+        if (mode === '2x2') {
+          const maxSize = baseSize * 2.5; // Limit to 2.5x the base size in 2x2 mode
+          size = Math.min(size, maxSize);
+        }
       }
       
       // Create rounded cube geometry with more subdivisions for smoother edges
