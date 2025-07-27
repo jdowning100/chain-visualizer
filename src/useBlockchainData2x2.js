@@ -1,9 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-
+import { DefaultMaxItems } from './App';
 const MaxBlocksToFetch = 10;
-const MaxItemsToKeep = 500; // Reduced for better 3D rendering performance
 
-export const useBlockchainData2x2 = (isEnabled = false) => {
+export const useBlockchainData2x2 = (isEnabled = false, maxItemsToKeep = DefaultMaxItems) => {
   const [items, setItems] = useState([]);
   const [wsConnections, setWsConnections] = useState({});
   const [isConnected, setIsConnected] = useState(false);
@@ -13,6 +12,7 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
   const fetchingParentsRef = useRef(new Set());
   const missingParentsRef = useRef(new Map());
   const isEnabledRef = useRef(isEnabled);
+  const maxItemsToKeepRef = useRef(maxItemsToKeep);
 
   // 2x2 hierarchy network configuration
   const networkConfig = {
@@ -64,7 +64,8 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
 
   // Cleanup function to keep only the most visible items (closest to camera)
   const cleanupOldItems = useCallback((itemsList) => {
-    if (itemsList.length <= MaxItemsToKeep) {
+    const currentMaxItems = maxItemsToKeepRef.current;
+    if (itemsList.length <= currentMaxItems) {
       return itemsList;
     }
     
@@ -79,11 +80,11 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
       return (b.number || 0) - (a.number || 0);
     });
     
-    const keptItems = sortedItems.slice(0, MaxItemsToKeep);
+    const keptItems = sortedItems.slice(0, currentMaxItems);
     
     // Log cleanup for debugging
-    if (itemsList.length > MaxItemsToKeep) {
-      const removedCount = itemsList.length - MaxItemsToKeep;
+    if (itemsList.length > currentMaxItems) {
+      const removedCount = itemsList.length - currentMaxItems;
       console.log(`🧹 2x2 cleanup: removed ${removedCount} items (oldest in render), kept ${keptItems.length}`);
     }
       
@@ -244,7 +245,7 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
         return cleanupOldItems(updatedItems);
       }
     });
-  }, [cleanupOldItems]);
+  }, [cleanupOldItems, maxItemsToKeep]);
 
   // Fetch missing parent block via HTTP
   const fetchMissingParent = useCallback(async (parentHash, chainName) => {
@@ -523,11 +524,17 @@ export const useBlockchainData2x2 = (isEnabled = false) => {
     return () => clearInterval(interval);
   }, [isConnected, isEnabled, pollLatestBlock]);
 
+  // Keep maxItemsToKeepRef current
+  useEffect(() => {
+    maxItemsToKeepRef.current = maxItemsToKeep;
+  }, [maxItemsToKeep]);
+
   // Periodic cleanup to ensure application stays light
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       setItems(prevItems => {
-        if (prevItems.length <= MaxItemsToKeep) {
+        const currentMaxItems = maxItemsToKeepRef.current;
+        if (prevItems.length <= currentMaxItems) {
           return prevItems;
         }
         console.log(`🕐 Periodic cleanup: ${prevItems.length} items`);

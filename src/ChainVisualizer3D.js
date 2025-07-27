@@ -2,11 +2,12 @@ import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { createTheme, themeConfigs } from './themes';
+import { DefaultMaxItems } from './App';
 import './ChainVisualizer.css';
 
 const MaxBlocksToFetch = 10;
 
-const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserInteracted = false }) => {  
+const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserInteracted = false, urlTheme = null, maxItems = DefaultMaxItems, onMaxItemsChange = () => {} }) => {  
   // Shared geometry cache
   const geometryCache = useRef(new Map());
   const materialCache = useRef(new Map());
@@ -55,8 +56,12 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
   const mouseRef = useRef(new THREE.Vector2());
   const [hoveredBlock, setHoveredBlock] = useState(null);
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: '' });
-  const [currentTheme, setCurrentTheme] = useState(mode === 'mainnet' ? 'space' : 'quai');
-  const [userSelectedTheme, setUserSelectedTheme] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState(() => {
+    // Use URL theme if provided, otherwise use default based on mode
+    if (urlTheme) return urlTheme;
+    return mode === 'mainnet' ? 'space' : 'quai';
+  });
+  const [userSelectedTheme, setUserSelectedTheme] = useState(!!urlTheme); // Mark as user-selected if URL theme provided
   const currentThemeRef = useRef(null);
   const modeRef = useRef(mode);
   const [audioEnabled, setAudioEnabled] = useState(true);
@@ -1817,6 +1822,50 @@ const ChainVisualizer = React.memo(({ blockchainData, mode = 'mainnet', hasUserI
                 {config.name}
               </option>
             ))}
+          </select>
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px' }}>
+          <label style={{ color: '#ffffff', fontSize: '12px', marginRight: '8px', fontWeight: '500' }}>
+            Max Items:
+          </label>
+          <select
+            value={maxItems}
+            onChange={(e) => {
+              const newMaxItems = parseInt(e.target.value, 10);
+              console.log('🔧 ChainVisualizer3D: maxItems dropdown changed to:', newMaxItems);
+              onMaxItemsChange(newMaxItems);
+            }}
+            style={{
+              background: 'transparent',
+              color: '#ffffff',
+              border: '1px solid rgba(204, 0, 0, 0.3)',
+              borderRadius: '4px',
+              padding: '4px 8px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              outline: 'none',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseOver={(e) => {
+              e.target.style.background = 'linear-gradient(135deg, rgba(204, 0, 0, 0.2) 0%, rgba(153, 0, 0, 0.2) 100%)';
+              e.target.style.borderColor = 'rgba(204, 0, 0, 0.5)';
+            }}
+            onMouseOut={(e) => {
+              e.target.style.background = 'transparent';
+              e.target.style.borderColor = 'rgba(204, 0, 0, 0.3)';
+              e.target.style.color = '#ffffff';
+            }}
+          >
+            <option value={250} style={{ background: '#1a0505' }}>250</option>
+            <option value={500} style={{ background: '#1a0505' }}>500</option>
+            <option value={1000} style={{ background: '#1a0505' }}>1000</option>
+            <option value={1500} style={{ background: '#1a0505' }}>1500</option>
+            <option value={2000} style={{ background: '#1a0505' }}>2000</option>
+            <option value={2500} style={{ background: '#1a0505' }}>2500</option>
+            <option value={5000} style={{ background: '#1a0505' }}>5000</option>
+            <option value={10000} style={{ background: '#1a0505' }}>10000</option>
           </select>
         </div>
         
